@@ -27,7 +27,7 @@ This solution requires:
 
 ### Amazon SageMaker
 
-Go through the steps defined in the Jupyper notebook [demo_customer_churn_pipeline.ipynb](https://github.com/aws-samples/real-time-churn-prediction-with-amazon-connect-and-amazon-sagemaker/blob/main/demo_customer_churn_pipeline.ipynb).
+Go through the steps defined in the Jupyper notebook [contact-center-data.ipynb](https://github.com/aws-samples/real-time-churn-prediction-with-amazon-connect-and-amazon-sagemaker/blob/main/contact-center-data.ipynb).
 
 ### AWS CloudFormation Stack
 
