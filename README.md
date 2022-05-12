@@ -1,4 +1,4 @@
-## Real-time Churn Prediction with Amazon Connect and Amazon SageMaker
+# Real-time Churn Prediction with Amazon Connect and Amazon SageMaker
 
 This repository provide a demonstration of how to build a real-time customer churn prediction pipeline for contact centers using Amazon connect and Amazon SageMaker services.
 
