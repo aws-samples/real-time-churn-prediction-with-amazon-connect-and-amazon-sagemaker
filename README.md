@@ -27,7 +27,10 @@ This solution requires:
 
 ### Amazon SageMaker
 
-Go through the steps defined in the Jupyper notebook [contact-center-data.ipynb](https://github.com/aws-samples/real-time-churn-prediction-with-amazon-connect-and-amazon-sagemaker/blob/main/contact-center-data.ipynb).
+Clone the [github repo](https://github.com/aws-samples/real-time-churn-prediction-with-amazon-connect-and-amazon-sagemaker) into SageMaker Studio. 
+
+1. Ingest data into SageMaker Feature Store.
+- Go through the steps defined in the Jupyper notebook [contact-center-data.ipynb](https://github.com/aws-samples/real-time-churn-prediction-with-amazon-connect-and-amazon-sagemaker/blob/main/contact-center-data.ipynb). This notebook will create a Feature Group (FG) and ingest data into the FG using a SageMaker Processing job based on the SageMaker Data Wrangler flow file.
 
 ### AWS CloudFormation Stack
 
