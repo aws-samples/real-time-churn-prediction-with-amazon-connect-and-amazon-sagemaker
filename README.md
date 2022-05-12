@@ -4,9 +4,9 @@ This repository provide a demonstration of how to build a real-time customer chu
 
 ## Architecture
 
-The following is the architecture diagram for the "Real-Time churn prediction with Amazon Connect and Amazon SageMaker" .
+The following is the architecture diagram for the "Real-Time churn prediction with Amazon Connect and Amazon SageMaker".
 
-![1](Architecture.png) 
+![1](/img/Architecture.png) 
 
 ## Deployment
 
