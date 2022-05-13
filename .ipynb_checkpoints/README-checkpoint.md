@@ -10,6 +10,16 @@ The following is the architecture diagram for the "Real-Time churn prediction wi
 
 ## Deployment
 
+### Prerequisites
+
+Users need to be familiar with the below AWS services:
+
+- Amazon SageMaker
+- Amazon Connect
+- AWS Lambda
+- AWS Step Functions
+- Amazon API Gateway
+
 ### Contact Lens for Amazon Connect
 
 This solution requires:
@@ -63,7 +73,32 @@ The CustomerLookup lambda function needs to be added to the list of AWS lambda f
 
 ### Amazon DynamoDB
 
-Four (4) DynamoDB tables will be created by the CloudFormation stack, CustomerData, ContactIds, ChurnPrediction, and Sentiments. The **CustomerData** has PhoneNumber (e.164) as partition key and it requires a **"customerid"** attribute to identify the customer, this attribute is the same **"customerid"** used by SageMaker.
+Four (4) DynamoDB tables will be created by the CloudFormation stack, CustomerData, ContactIds, ChurnPrediction, and Sentiments. The **CustomerData** has PhoneNumber (e.164) as partition key and it requires the following attributes (string):
+
+- ```customerid```
+- ```contractedMonths```
+- ```email```
+- ```FirstName```
+- ```LastName```
+
+### Amazon S3
+
+Create an Amazon S3 bucket and a CloudFront distribution with that S3 bucket as the origin. Use CCPcustom.html as the default root object.
+
+Update the Approved origins in the AWS Management Console > Amazon Connect adding the new created Cloudfront URL.
+
+### Web Interface
+
+To build the Agent Custom CCP upload the files in the website folder, update the CCPcustom.html with the following information:
+
+- Line 80 - ```var instanceURL = "***ADD your Amazon Connect CCP v2 URL - https://{InstanceName}.my.connect.aws/connect/ccp-v2/***"```
+- Line 185 - ```"url": "***apiGatewayInvokeURLchurn URL - Output of CloudFormation***"```
+- Line 395 - ```"url": "***apiGatewayInvokeURLcontract URL - Output of CloudFormation***"```
+
+The website will look as below:
+
+![5](/img/WebInterface1.png)
+![6](/img/WebInterface2.png)
 
 ## Security
 
@@ -72,4 +107,3 @@ See [CONTRIBUTING](CONTRIBUTING.md#security-issue-notifications) for more inform
 ## License
 
 This library is licensed under the MIT-0 License. See the LICENSE file.
-
