@@ -105,7 +105,7 @@ The website will look as below:
 
 ## Clean Up
 
-Following these steps to clean up all the project:
+Following these steps to clean up the project:
 
 - CloudFormation, delete the stack created as part of the process above
 - CloudFront, delete the distribution
