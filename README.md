@@ -47,7 +47,7 @@ Clone the [github repo](https://github.com/aws-samples/real-time-churn-predictio
 
 **NOTE: CloudFormation Stack has not been uploaded to the repository**
 
-The CloudFormation stack Summit2022-Template-v2.yaml will create all the serverless applications required for the solution. The input parameters of the CloudFormation stack include Amazon Connect ARN, Amazon Connect Instance, Amazon SageMaker Endpoint name, and Amazon SageMaker Feature Group Name.
+The CloudFormation stack Summit2022-Template-v3.yaml, in the cloudformation folder, will create all the serverless applications required for the solution. The input parameters of the CloudFormation stack include Amazon Connect ARN, Amazon Connect Instance, Amazon SageMaker Endpoint name, and Amazon SageMaker Feature Group Name.
 
 ![4](/img/cfParameters.png)
 
