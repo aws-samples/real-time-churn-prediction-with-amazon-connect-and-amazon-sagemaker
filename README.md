@@ -92,7 +92,7 @@ Update the Approved origins in the AWS Management Console > Amazon Connect addin
 
 To build the Agent Custom CCP upload the files in the website folder, update the CCPcustom.html with the following information:
 
-- Line 80 - ```var instanceURL = "***ADD your Amazon Connect CCP v2 URL - https://{InstanceName}.my.connect.aws/connect/ccp-v2/***"```
+- Line 80 - ```var instanceURL = "***ADD your Amazon Connect CCP v2 URL***"```
 - Line 185 - ```"url": "***apiGatewayInvokeURLchurn URL - Output of CloudFormation***"```
 - Line 395 - ```"url": "***apiGatewayInvokeURLcontract URL - Output of CloudFormation***"```
 
