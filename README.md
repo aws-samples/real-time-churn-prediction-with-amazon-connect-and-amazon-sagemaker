@@ -90,7 +90,7 @@ Update the Approved origins in the AWS Management Console > Amazon Connect addin
 
 ![5](/img/connectOrigins.png)
 
-### Web Interface
+### Agent Custom CCP
 
 To build the Agent Custom CCP upload the files in the website folder, update the CCPcustom.html with the following information:
 
