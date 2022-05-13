@@ -88,6 +88,8 @@ Create an Amazon S3 bucket and a CloudFront distribution with that S3 bucket as 
 
 Update the Approved origins in the AWS Management Console > Amazon Connect adding the new created Cloudfront URL.
 
+![5](/img/connectOrigins.png)
+
 ### Web Interface
 
 To build the Agent Custom CCP upload the files in the website folder, update the CCPcustom.html with the following information:
@@ -98,8 +100,8 @@ To build the Agent Custom CCP upload the files in the website folder, update the
 
 The website will look as below:
 
-![5](/img/WebInterface1.png)
-![6](/img/WebInterface2.png)
+![6](/img/WebInterface1.png)
+![7](/img/WebInterface2.png)
 
 ## Security
 
