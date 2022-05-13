@@ -10,6 +10,16 @@ The following is the architecture diagram for the "Real-Time churn prediction wi
 
 ## Deployment
 
+### Pre-requisities
+
+Users need to be familiar with the below AWS services:
+
+- Amazon SageMaker
+- Amazon Connect
+- AWS Lambda
+- AWS Step Functions
+- Amazon API Gateway
+
 ### Contact Lens for Amazon Connect
 
 This solution requires:
