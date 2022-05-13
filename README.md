@@ -103,6 +103,15 @@ The website will look as below:
 ![6](/img/WebInterface1.png)
 ![7](/img/WebInterface2.png)
 
+## Clean Up
+
+Following these steps to clean up all the project:
+
+- CloudFormation, delete the stack created as part of the process above
+- CloudFront, delete the distribution
+- S3, delete the bucket used to store the files of the website
+- Amazon Connect, disable Contact Lens in the Contact Flows enabled at the start of the project
+
 ## Security
 
 See [CONTRIBUTING](CONTRIBUTING.md#security-issue-notifications) for more information.
