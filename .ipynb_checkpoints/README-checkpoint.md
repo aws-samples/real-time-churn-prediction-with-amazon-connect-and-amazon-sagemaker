@@ -19,6 +19,7 @@ Users need to be familiar with the below AWS services:
 - AWS Lambda
 - AWS Step Functions
 - Amazon API Gateway
+- Amazon S3 and CloudFront
 
 ### Contact Lens for Amazon Connect
 
@@ -81,7 +82,7 @@ Four (4) DynamoDB tables will be created by the CloudFormation stack, CustomerDa
 - ```FirstName```
 - ```LastName```
 
-### Amazon S3
+### Amazon S3 and CloudFront
 
 Create an Amazon S3 bucket and a CloudFront distribution with that S3 bucket as the origin. Use CCPcustom.html as the default root object.
 
