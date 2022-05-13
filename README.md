@@ -10,7 +10,7 @@ The following is the architecture diagram for the "Real-Time churn prediction wi
 
 ## Deployment
 
-### Pre-requisities
+### Prerequisites
 
 Users need to be familiar with the below AWS services:
 
