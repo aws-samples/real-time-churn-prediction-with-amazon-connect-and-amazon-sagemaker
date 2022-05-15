@@ -79,31 +79,31 @@ This template is designed to automate the deployment of models in the Amazon Sag
 
 4. Click the link to open the local file folder on the left panel;
 
-![project5](./img/repository_local_folder)
+![project5](./img/repository_local_folder.png)
 
 5. You can update the "test.py" file in the test folder to add custom logic to test the endpoint. In this example, we will leave it as for now to automatically pass the endpoint test;
 
-![project6](./img/test_file)
+![project6](./img/test_file.png)
 
 6. This project will create two event bridge rules. One is used to trigger deployment when a model status is changed in model registry and the other one is used to trigger deployment to production when a CodeCommit is updated with manual approval;
 
-![project7](./img/event_rules)
+![project7](./img/event_rules.png)
 
 7. From the CodePipeline console, you can see the pipeline is in the "In progress" status waiting for manual approval of the staging endpoint;
 
-![project8](./img/codepipeline_inprogress)
+![project8](./img/codepipeline_inprogress.png)
 
-![project9](./img/manual_approval)
+![project9](./img/manual_approval.png)
 
 8. After the necessary unit tests are done and confirming the endpoint deployed in the staging endpoint is ready for production. We can provide manual approval to trigger the production deployment step;
 
-![project10](./img/approve_staging)
+![project10](./img/approve_staging.png)
 
-![project11](./img/deploy_prod)
+![project11](./img/deploy_prod.png)
 
 9. Once the DeployProd step in the pipeline is finished, a production endpoint is available to serve real-time inference request for churn prediction.
 
-![project12](./img/deployed_endpoints)
+![project12](./img/deployed_endpoints.png)
 
 
 ### AWS CloudFormation Stack
