@@ -93,7 +93,7 @@ This template is designed to automate the deployment of models in the Amazon Sag
 
 ![project8](./img/codepipeline_inprogress.png)
 
-![project9](./img/manual_approval.png)
+![project9](./img/manual_approve.png)
 
 8. After the necessary unit tests are done and confirming the endpoint deployed in the staging endpoint is ready for production. We can provide manual approval to trigger the production deployment step;
 
