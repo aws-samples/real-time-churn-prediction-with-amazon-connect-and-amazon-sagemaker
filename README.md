@@ -1,4 +1,4 @@
-## Real-time Churn Prediction with Amazon Connect and Amazon SageMaker
+# Real-time Churn Prediction with Amazon Connect and Amazon SageMaker
 
 This repository provide a demonstration of how to build a real-time customer churn prediction pipeline for contact centers using Amazon connect and Amazon SageMaker services.
 
@@ -6,9 +6,20 @@ This repository provide a demonstration of how to build a real-time customer chu
 
 The following is the architecture diagram for the "Real-Time churn prediction with Amazon Connect and Amazon SageMaker".
 
-![1](Architecture.png) 
+![1](/img/Architecture.png) 
 
 ## Deployment
+
+### Prerequisites
+
+Users need to be familiar with the below AWS services:
+
+- Amazon SageMaker
+- Amazon Connect
+- AWS Lambda
+- AWS Step Functions
+- Amazon API Gateway
+- Amazon S3 and CloudFront
 
 ### Contact Lens for Amazon Connect
 
@@ -36,7 +47,7 @@ Clone the [github repo](https://github.com/aws-samples/real-time-churn-predictio
 
 **NOTE: CloudFormation Stack has not been uploaded to the repository**
 
-The CloudFormation stack Summit2022-Template-v2.yaml will create all the serverless applications required for the solution. The input parameters of the CloudFormation stack include Amazon Connect ARN, Amazon Connect Instance, Amazon SageMaker Endpoint name, and Amazon SageMaker Feature Group Name.
+The CloudFormation stack Summit2022-Template-v3.yaml, in the cloudformation folder, will create all the serverless applications required for the solution. The input parameters of the CloudFormation stack include Amazon Connect ARN, Amazon Connect Instance, Amazon SageMaker Endpoint name, and Amazon SageMaker Feature Group Name.
 
 ![4](/img/cfParameters.png)
 
@@ -63,7 +74,43 @@ The CustomerLookup lambda function needs to be added to the list of AWS lambda f
 
 ### Amazon DynamoDB
 
-Four (4) DynamoDB tables will be created by the CloudFormation stack, CustomerData, ContactIds, ChurnPrediction, and Sentiments. The **CustomerData** has PhoneNumber (e.164) as partition key and it requires a **"customerid"** attribute to identify the customer, this attribute is the same **"customerid"** used by SageMaker.
+Four (4) DynamoDB tables will be created by the CloudFormation stack, CustomerData, ContactIds, ChurnPrediction, and Sentiments. The **CustomerData** has PhoneNumber (e.164) as partition key and it requires the following attributes (string):
+
+- ```customerid```
+- ```contractedMonths```
+- ```email```
+- ```FirstName```
+- ```LastName```
+
+### Amazon S3 and CloudFront
+
+Create an Amazon S3 bucket and a CloudFront distribution with that S3 bucket as the origin. Use CCPcustom.html as the default root object.
+
+Update the Approved origins in the AWS Management Console > Amazon Connect adding the new created Cloudfront URL.
+
+![5](/img/connectOrigins.png)
+
+### Agent Custom CCP
+
+To build the Agent Custom CCP upload the files in the website folder, update the CCPcustom.html with the following information:
+
+- Line 80 - ```var instanceURL = "***ADD your Amazon Connect CCP v2 URL***"```
+- Line 185 - ```"url": "***apiGatewayInvokeURLchurn URL - Output of CloudFormation***"```
+- Line 395 - ```"url": "***apiGatewayInvokeURLcontract URL - Output of CloudFormation***"```
+
+The website will look as below:
+
+![6](/img/WebInterface1.png)
+![7](/img/WebInterface2.png)
+
+## Clean Up
+
+Following these steps to clean up the project:
+
+- CloudFormation, delete the stack created as part of the process above
+- CloudFront, delete the distribution
+- S3, delete the bucket used to store the files of the website
+- Amazon Connect, disable Contact Lens in the Contact Flows enabled at the start of the project
 
 ## Security
 
@@ -72,4 +119,3 @@ See [CONTRIBUTING](CONTRIBUTING.md#security-issue-notifications) for more inform
 ## License
 
 This library is licensed under the MIT-0 License. See the LICENSE file.
-
