@@ -67,19 +67,44 @@ This template is designed to automate the deployment of models in the Amazon Sag
 - repository: AWS CodeCommit 
 - Orchestration: AWS CodePipeline
 
-2. Fill in the necessary information and create the project;
+2. Fill in the required information, such as the model group name, project name and etc., and create the project;
 
-![project2](/img/create_project.png)
+![project2](./img/create_project.png)
 
 3. Once the project is created, you can clone the repository to your stuido local folder
 
-![project3](/img/project_created.png)
+![project3](./img/project_created.png)
 
-![project4](/img/clone_repository.png)
+![project4](./img/clone_repository.png)
 
-4. Click the link to open the local file folder on the left panel
+4. Click the link to open the local file folder on the left panel;
 
-![project5](/img/)
+![project5](./img/repository_local_folder)
+
+5. You can update the "test.py" file in the test folder to add custom logic to test the endpoint. In this example, we will leave it as for now to automatically pass the endpoint test;
+
+![project6](./img/test_file)
+
+6. This project will create two event bridge rules. One is used to trigger deployment when a model status is changed in model registry and the other one is used to trigger deployment to production when a CodeCommit is updated with manual approval;
+
+![project7](./img/event_rules)
+
+7. From the CodePipeline console, you can see the pipeline is in the "In progress" status waiting for manual approval of the staging endpoint;
+
+![project8](./img/codepipeline_inprogress)
+
+![project9](./img/manual_approval)
+
+8. After the necessary unit tests are done and confirming the endpoint deployed in the staging endpoint is ready for production. We can provide manual approval to trigger the production deployment step;
+
+![project10](./img/approve_staging)
+
+![project11](./img/deploy_prod)
+
+9. Once the DeployProd step in the pipeline is finished, a production endpoint is available to serve real-time inference request for churn prediction.
+
+![project12](./img/deployed_endpoints)
+
 
 ### AWS CloudFormation Stack
 
@@ -87,7 +112,7 @@ This template is designed to automate the deployment of models in the Amazon Sag
 
 The CloudFormation stack Summit2022-Template-v3.yaml, in the cloudformation folder, will create all the serverless applications required for the solution. The input parameters of the CloudFormation stack include Amazon Connect ARN, Amazon Connect Instance, Amazon SageMaker Endpoint name, and Amazon SageMaker Feature Group Name.
 
-![4](/img/cfParameters.png)
+![4](./img/cfParameters.png)
 
 The outputs of the CloudFormation stack includes:
 
@@ -126,7 +151,7 @@ Create an Amazon S3 bucket and a CloudFront distribution with that S3 bucket as 
 
 Update the Approved origins in the AWS Management Console > Amazon Connect adding the new created Cloudfront URL.
 
-![5](/img/connectOrigins.png)
+![5](./img/connectOrigins.png)
 
 ### Agent Custom CCP
 
@@ -138,14 +163,16 @@ To build the Agent Custom CCP upload the files in the website folder, update the
 
 The website will look as below:
 
-![6](/img/WebInterface1.png)
-![7](/img/WebInterface2.png)
+![6](./img/WebInterface1.png)
+
+![7](./img/WebInterface2.png)
 
 ## Clean Up
 
 Following these steps to clean up the project:
 
 - Use the Clean Up cell in the demo customer churn pipeline notebook to clean up resources created in the model build process
+- Delete the SageMaker project from the SageMaker project console, this will delete the code pipeline, but cloudformation templates and repositories created using this project will need to be manually deleted
 - CloudFormation, delete the stack created as part of the process above
 - CloudFront, delete the distribution
 - S3, delete the bucket used to store the files of the website
