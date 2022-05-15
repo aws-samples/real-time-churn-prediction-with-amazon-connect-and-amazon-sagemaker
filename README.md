@@ -107,6 +107,7 @@ The website will look as below:
 
 Following these steps to clean up the project:
 
+- Use the Clean Up cell in the demo customer churn pipeline notebook to clean up resources created in the model build process
 - CloudFormation, delete the stack created as part of the process above
 - CloudFront, delete the distribution
 - S3, delete the bucket used to store the files of the website
