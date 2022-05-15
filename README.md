@@ -40,8 +40,29 @@ This solution requires:
 
 Clone the [github repo](https://github.com/aws-samples/real-time-churn-prediction-with-amazon-connect-and-amazon-sagemaker) into SageMaker Studio. 
 
-1. Ingest data into SageMaker Feature Store.
+#### Model Build Pipeline
+
+1. Ingest data into SageMaker Feature Store
 - Go through the steps defined in the Jupyper notebook [contact-center-data.ipynb](https://github.com/aws-samples/real-time-churn-prediction-with-amazon-connect-and-amazon-sagemaker/blob/main/contact-center-data.ipynb). This notebook will create a Feature Group (FG) and ingest data into the FG using a SageMaker Processing job based on the SageMaker Data Wrangler flow file.
+
+2. Build the churn model using SageMaker Pipeline
+- Go through the steps defined in the Jupyter notebook [demo_customer_churn_pipeline.ipynb](https://github.com/aws-samples/real-time-churn-prediction-with-amazon-connect-and-amazon-sagemaker/blob/main/demo_customer_churn_pipeline.ipynb). This notebook will create a SageMaker Pipeline to create the machine learning model for real-time churn prediction. A complete build pipeline looks like below:
+
+![pipeline](/img/model_build_pipeline.png)
+
+
+#### Model Deployment using SageMaker prebuilt project template
+
+To deploy the trained model from model registry, you can simply use the SageMaker built-in Project template as shown below:
+![project1](/img/sagemaker_project.png)
+
+This template is designed to automate the deployment of models in the Amazon SageMaker model registry to SageMaker Endpoints for real-time inference. The template provisions an AWS CodeCommit repository with configuration files to specify the model deployment steps, CloudFormation templates to define endpoints as infrastructure, and seed code for testing the endpoint. You can customize the template to suit your requirements or add more tests. AWS CodePipeline is used to orchestrate the model deployment. 
+- repository: AWS CodeCommit 
+- Orchestration: AWS CodePipeline
+
+Follow the steps to create the model deployment pipeline using SageMaker Project:
+
+1. 
 
 ### AWS CloudFormation Stack
 
