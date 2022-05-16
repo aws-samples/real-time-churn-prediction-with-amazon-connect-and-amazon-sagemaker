@@ -1,0 +1,467 @@
+<!-- MIT No Attribution
+
+Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
+
+Permission is hereby granted, free of charge, to any person obtaining a copy of this
+software and associated documentation files (the "Software"), to deal in the Software
+without restriction, including without limitation the rights to use, copy, modify,
+merge, publish, distribute, sublicense, and/or sell copies of the Software, and to
+permit persons to whom the Software is furnished to do so.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED,
+INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A
+PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT
+HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION
+OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE
+SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+-->
+
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="description" content="">
+    <!-- Bootstrap core CSS -->
+    <link rel="stylesheet"
+    href="https://stackpath.bootstrapcdn.com/bootstrap/4.5.2/css/bootstrap.min.css"
+    integrity="sha512-MoRNloxbStBcD8z3M/2BmnT+rg4IsMxPkXaGh2zD6LGNNFE80W3onsAhRcMAMrSoyWL9xD7Ert0men7vR8LUZg=="
+    crossorigin="anonymous"
+    referrerpolicy="no-referrer"/>
+    <script
+        src="https://cdnjs.cloudflare.com/ajax/libs/jquery/3.6.0/jquery.min.js"
+        integrity="sha512-894YE6QWD5I59HgZOGReFYm4dnWc1Qt5NtvYSaNcOP+u1T9qYdvdihz0PPSiiqn/+/3e7Jo4EaG7TubfWGUrMQ=="
+        crossorigin="anonymous"
+        referrerpolicy="no-referrer"></script>
+    <script src="https://npmcdn.com/tether@1.2.4/dist/js/tether.min.js"></script>
+    <script src="https://stackpath.bootstrapcdn.com/bootstrap/4.5.2/js/bootstrap.min.js"
+        integrity="sha384-B4gt1jrGC7Jh4AgTPSdUtOBvfO8shuf57BaghqFfPlYxofvL8/KUEfYiJOMMV+rV"
+        crossorigin="anonymous"
+        referrerpolicy="no-referrer"></script>
+    <script type="text/javascript" src="js/connect-streams.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+      .bd-placeholder-img {
+        font-size: 1.125rem;
+        text-anchor: middle;
+        -webkit-user-select: none;
+        -moz-user-select: none;
+        user-select: none;
+      }
+
+      @media (min-width: 768px) {
+        .bd-placeholder-img-lg {
+          font-size: 3.5rem;
+        }
+      }
+    </style>
+    <!-- Custom styles for this template -->
+    <link href="grid.css" rel="stylesheet">
+    <style>
+      .myDiv {
+        border: 5px outset blue;
+        background-color: white;
+        text-align: center;
+      }
+    </style>
+  </head>
+  <!-- Add the call to init() as an onload so it will only run once the page is loaded -->
+  <body onload="init()">
+    <div class="myDiv">
+      <h1>Amazon Connect and Amazon SageMaker</h1>
+      <p class="lead">Predicting customer churn in real-time with Amazon Sagemaker and Contact Lens for Amazon Connect in an AI-Powered Contact Center.</p>
+    </div>
+    <div class="row">
+      <div class="col-md-4 bg-light themed-grid-col".bg-ligth id="container-div" style="height: 712px;">
+        <script type="text/javascript">
+          var containerDiv = document.getElementById("container-div");
+          window.myCPP = window.myCPP || {};
+
+          // UPDATE CCPv2 URL Here
+          var instanceURL = "***ADD your Amazon Connect CCP v2 URL - https://{InstanceName}.my.connect.aws/connect/ccp-v2/***";
+
+          // initialize the streams api
+          function init() {
+            // initialize the ccp
+            connect.core.initCCP(containerDiv, {
+              ccpUrl: instanceURL,            // REQUIRED
+              loginPopup: true,               // optional, defaults to `true`
+              loginPopupAutoClose: true,      // optional, defaults to `false`
+              loginOptions: {                 // optional, if provided opens login in new window
+                autoClose: true,              // optional, defaults to `false`
+                height: 600,                  // optional, defaults to 578
+                width: 400,                   // optional, defaults to 433
+                top: 0,                       // optional, defaults to 0
+                left: 0                       // optional, defaults to 0
+              },
+              region: "*** REGION ***",         // REQUIRED for `CHAT`, optional otherwise
+              softphone: {                    // optional, defaults below apply if not provided
+                allowFramedSoftphone: true,   // optional, defaults to false
+                disableRingtone: false,       // optional, defaults to false
+                ringtoneUrl: "./ringtone.mp3" // optional, defaults to CCP’s default ringtone if a falsy value is set
+              },
+              pageOptions: { //optional
+                enableAudioDeviceSettings: false, //optional, defaults to 'false'
+                enablePhoneTypeSettings: true //optional, defaults to 'true'
+              },
+              ccpAckTimeout: 5000, //optional, defaults to 3000 (ms)
+              ccpSynTimeout: 3000, //optional, defaults to 1000 (ms)
+              ccpLoadTimeout: 10000 //optional, defaults to 5000 (ms)
+             });
+
+          // Call the subscribe to Streams API events, Contact and Agent
+          connect.contact(subscribeToContactEvents);
+          var PhoneNumberField = document.getElementById("PhoneNumber");
+          var FirstNameField = document.getElementById("FirstName");
+          var attributesDiv = document.getElementById("attributesDiv");
+          var PieDiv = document.getElementById("PieDiv");
+          var ChartDiv = document.getElementById("ChartDiv");
+          var ContractDiv = document.getElementById("ContractDiv");
+          var contactIdField = document.getElementById("contactId");
+          var customeridField = document.getElementById("customerid");
+          var contractedMonthsField = document.getElementById("contractedMonths");
+          var c;
+          var myInterval;
+          PieDiv.hidden = true;
+          ChartDiv.hidden = true;
+          ContractDiv.hidden = true;
+          function subscribeToContactEvents(contact) {
+            window.myCPP.contact = contact;
+            c = contact;
+            //console.log("Contact Type: " + contact.getType());
+            console.log("Subscribing to Contact Events" + c);
+            if (contact.getActiveInitialConnection()
+                && contact.getActiveInitialConnection().getEndpoint()) {
+                console.log('New contact is from: '+ contact.getActiveInitialConnection().getEndpoint().phoneNumber);
+                showAttributes(contact);
+            } else {
+                console.log('Contact already exists');
+            }
+            console.log('Contact is from queue'+ contact.getQueue().name);
+            console.log('Contact attributes are ' + JSON.stringify(contact.getAttributes()));
+            contact.onIncoming(handleContactIncoming);
+            contact.onAccepted(handleContactAccepted);
+            contact.onConnected(handleContactConnected);
+            contact.onEnded(handleContactEnded);
+          }
+
+          function handleContactIncoming(contact) {
+              if (contact) {
+                  console.log('[contact.onIncoming] This is a CALLBACK contact');
+              } else {
+                  console.log('[contact.onIncoming] Contact is incoming. Null contact passed to event handler');
+              }
+          }
+
+          function handleContactAccepted(contact) {
+              if (contact) {
+                  console.log('[contact.onAccepted] Contact accepted by agent. Contact state is ' + contact.getStatus().type);
+
+              } else {
+                  console.log('[contact.onAccepted] Contact accepted by agent. Null contact passed to event handler');
+              }
+          }
+
+          function handleContactConnected(contact) {
+              if (contact) {
+                  console.log('[contact.onConnected] Contact connected to agent. Contact state is ' + contact.getStatus().type);
+                  PieDiv.hidden = false;
+                  ChartDiv.hidden = false;
+                  ContractDiv.hidden = false;
+                  var i = 0;
+                  var data1 =  0;
+                  var label1 = 0;
+                  var x = 0;
+                  var y = 0;
+                  var z = 0;
+                  var counter = 0;
+                  myInterval = setInterval(myChartUpdate,5000);
+
+                  function myChartUpdate() {
+                    var ArrayValues = [];
+                    var settings = {
+
+                      // UPDATE apiGatewayInvokeURLchurn URL Here
+                      "url": "***apiGatewayInvokeURLchurn URL - Output of CloudFormation***",
+
+                      "method": "POST",
+                      "timeout": 0,
+                      "data": "{ \"ContactId\": "+ JSON.stringify(contact.contactId) +" }"
+                    };
+
+                    $.ajax(settings).done(function (response) {
+                      console.log(response.myArray);
+                      console.log(response.mySentiment);
+                      var ArrayValues = response.myArray;
+                      var SentimentValues = response.mySentiment;
+                      clearChart(myChart);
+                      for (var i = 0; i < ArrayValues.length; i++) {
+                        label1 = i + 1;
+                        data1 = ArrayValues[i];
+                        addData(myChart, label1, data1);
+                        function addData(chart, label, data) {
+                            chart.data.labels.push(label);
+                            chart.data.datasets.forEach((dataset) => {
+                                dataset.data.push(data);
+                            });
+                            chart.update();
+                        };
+                      };
+                      for (var i = 0; i < SentimentValues.length; i++) {
+                        var x = SentimentValues[0];
+                        var y = SentimentValues[1];
+                        var z = SentimentValues[2];
+
+                        const data3 = {
+                          labels: [
+                            'Negative',
+                            'Positive',
+                            'Neutral'
+                          ],
+                          datasets: [{
+                            label: 'My First Dataset',
+                            data: [x, y, z],
+                            backgroundColor: [
+                              'rgb(220,20,60)',
+                              'rgb(50,205,50)',
+                              'rgb(255, 205, 86)'
+                            ],
+                            hoverOffset: 4
+                          }]
+                        };
+                        pieUpdate(myPie, data3)
+                        function pieUpdate(chart, data) {
+                          chart.data = data;
+                          chart.update();
+                        }
+                      };
+
+                      });
+                    };
+
+              } else {
+                  console.log('[contact.onConnected] Contact connected to agent. Null contact passed to event handler');
+                  PieDiv.hidden = false;
+                  ChartDiv.hidden = false;
+                  ContractDiv.hidden = false;
+              }
+          }
+
+          function handleContactEnded(contact) {
+              if (contact) {
+                  console.log('[contact.onEnded] Contact has ended. Contact state is ' + contact.getStatus().type);
+                  clearInterval(myInterval);
+                  clearChart(myChart);
+                  clearValues();
+              } else {
+                  console.log('[contact.onEnded] Contact has ended. Null contact passed to event handler');
+                  clearInterval(myInterval);
+                  clearChart(myChart);
+                  clearValues();
+              }
+          }
+
+          function showAttributes(contact) {
+              // Gathers received CTR Contact Atrtributes, and displays them with the Contacts Phone Number
+              var attributes = contact.getAttributes();
+
+              console.log(attributes);
+              contactIdField.value = contact.contactId;
+              if(attributes.PhoneNumber) {
+                  PhoneNumberField.value = attributes.PhoneNumber.value;
+              }
+              if(attributes.FirstName) {
+                  FirstNameField.value = attributes.FirstName.value;
+              }
+              if(attributes.customerid) {
+                  customeridField.value = attributes.customerid.value;
+              }
+              if(attributes.contractedMonths) {
+                  contractedMonthsField.value = attributes.contractedMonths.value;
+              }
+          }
+
+          function clearChart(chart){
+            const labels4 = ['0'];
+            const data4 = {
+              labels: labels4,
+              datasets: [{
+                label: 'Churn Value',
+                backgroundColor: 'rgb(255, 99, 132)',
+                borderColor: 'rgb(255, 99, 132)',
+                data: [0],
+              }]
+            };
+            chart.data = data4;
+            chart.update();
+          }
+
+          function clearValues(){
+            PhoneNumberField.value = null;
+            customeridField.value = null;
+            contactIdField.value = null;
+            FirstNameField.value = null;
+            contractedMonthsField.value = null;
+            PieDiv.hidden = true;
+            ChartDiv.hidden = true;
+            ContractDiv.hidden = true;
+          }
+        }
+        </script>
+    </div>
+    <div class="col-md-4 bg-light themed-grid-col".bg-light>
+      <div>
+        <h4>Customer Details</h4>
+        <form id="attributesDiv">
+          <div class="form-group row">
+            <label for="FirstName" class="col-sm-3 col-form-label col-form-label-sm">FirstName:</label>
+            <div class="col-sm-9">
+              <input type="text" class="form-control form-control-sm" id="FirstName" placeholder="First Name" required>
+            </div>
+            <label for="PhoneNumber" class="col-sm-3 col-form-label col-form-label-sm">PhoneNumber:</label>
+            <div class="col-sm-9">
+              <input type="text" class="form-control form-control-sm" id="PhoneNumber" placeholder="Customer Phone Number" required>
+            </div>
+            <label for="contactId" class="col-sm-3 col-form-label col-form-label-sm">ContactId:</label>
+            <div class="col-sm-9">
+              <input type="text" class="form-control form-control-sm" id="contactId" placeholder="Contact Id" required>
+            </div>
+            <label for="customerid" class="col-sm-3 col-form-label col-form-label-sm">CustomerId:</label>
+            <div class="col-sm-9">
+              <input type="text" class="form-control form-control-sm" id="customerid" placeholder="Customer Id" required>
+            </div>
+            <label for="contractedMonths" class="col-sm-3 col-form-label col-form-label-sm">Contract(months):</label>
+            <div class="col-sm-9">
+              <input type="text" class="form-control form-control-sm" id="contractedMonths" placeholder="Months Contracted" required>
+            </div>
+          </div>
+        </form>
+      </div>
+      <div id="PieDiv" class="chart-container">
+        <h4>Customer Past Sentiments</h4>
+        <canvas id="myPie" ></canvas>
+        <script>
+          const data2 = {
+            labels: [
+              'Negative',
+              'Positive',
+              'Neutral'
+            ],
+            datasets: [{
+              label: 'My First Dataset',
+              data: [0, 0, 0],
+              backgroundColor: [
+                'rgb(220,20,60)',
+                'rgb(50,205,50)',
+                'rgb(255, 205, 86)'
+              ],
+              hoverOffset: 4
+            }]
+          };
+          const config2 = {
+            type: 'doughnut',
+            data: data2,
+            options:{
+              radius: '70%',
+              animation: {
+                duration: 0
+              }
+            }
+          };
+          const myPie = new Chart(
+            document.getElementById('myPie'),
+            config2
+          );
+        </script>
+      </div>
+    </div>
+    <div class="col-md-4 themed-grid-col" style = "text-align:center;">
+      <div id="ContractDiv">
+        <hr>
+        <br>
+          <button type="button" class="btn btn-success btn-lg" onClick="showContractModel();"> Contract Extension </button>
+        <br>
+        <script>
+          function showContractModel () {
+            $('#exampleModal').modal();
+          }
+          function updateContract (months) {
+            console.log(months);
+            console.log(customerid.value);
+            $('#exampleModal').modal('hide');
+            var settings = {
+
+              // UPDATE apiGatewayInvokeURLcontract URL Here
+              "url": "***apiGatewayInvokeURLcontract URL - Output of CloudFormation***",
+
+              "method": "POST",
+              "timeout": 0,
+              "data": "{ \"CustomerId\": "+ JSON.stringify(customerid.value) +", \"ContactId\": "+ JSON.stringify(contactId.value) +", \"PhoneNumber\": "+ JSON.stringify(PhoneNumber.value) +", \"Months\": "+ months +" }"
+            };
+
+            $.ajax(settings).done(function (response) {
+                console.log(response);
+                $('#contractedMonths').val(months);
+              });
+          }
+        </script>
+        <br>
+        <hr>
+        <!-- Modal -->
+        <div class="modal fade" id="exampleModal" tabindex="-1" role="dialog" aria-labelledby="exampleModalLabel" aria-hidden="true">
+          <div class="modal-dialog" role="document">
+            <div class="modal-content">
+              <div class="modal-header">
+                <h5 class="modal-title" id="exampleModalLabel">Contract Extension</h5>
+                <button type="button" class="close" data-dismiss="modal" aria-label="Close">
+                  <span aria-hidden="true">&times;</span>
+                </button>
+              </div>
+              <div class="modal-body">
+                Press Extend and number of months for the contract extension
+              </div>
+              <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-dismiss="modal">Close</button>
+                <button type="button" id="updateContract" class="btn btn-primary" onClick="updateContract(36);">Extend 36</button>
+                <button type="button" id="updateContract" class="btn btn-primary" onClick="updateContract(24);">Extend 24</button>
+                <button type="button" id="updateContract" class="btn btn-primary" onClick="updateContract(12);">Extend 12</button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div id="ChartDiv">
+        <h4>Customer Churn Score</h4>
+        <canvas id="myChart"></canvas>
+        <script>
+          const labels = ['0'];
+          const data = {
+            labels: labels,
+            datasets: [{
+              label: 'Churn Value',
+              backgroundColor: 'rgb(255, 99, 132)',
+              borderColor: 'rgb(255, 99, 132)',
+              data: [0],
+            }]
+          };
+        </script>
+        <script>
+          const config = {
+            type: 'line',
+            data: data,
+            options: {
+              animation: {
+                duration: 0
+              }
+            }
+          };
+          const myChart = new Chart(
+            document.getElementById('myChart'),
+            config
+          );
+        </script>
+      </div>
+    </div>
+  </div>
+  </body>
+</html>

@@ -126,7 +126,7 @@ The outputs of the CloudFormation stack includes:
 
 ### Lambda functions with Pandas Layer pre-requisite
 
-There are lambda functions that will need [Pandas](https://pandas.pydata.org/) Layer, these are:
+There are three (3) lambda functions that will need [Pandas](https://pandas.pydata.org/) Layer, these are:
 - CLRealTime - python3.7
 - FSUpdate - python 3.7
 - UpdateContract - python 3.7
@@ -158,6 +158,7 @@ Update the Approved origins in the AWS Management Console > Amazon Connect addin
 To build the Agent Custom CCP upload the files in the website folder, update the CCPcustom.html with the following information:
 
 - Line 80 - ```var instanceURL = "***ADD your Amazon Connect CCP v2 URL***"```
+- Line 97 - ```replace region with your AWS region```
 - Line 185 - ```"url": "***apiGatewayInvokeURLchurn URL - Output of CloudFormation***"```
 - Line 395 - ```"url": "***apiGatewayInvokeURLcontract URL - Output of CloudFormation***"```
 
