@@ -135,13 +135,16 @@ The CustomerLookup lambda function needs to be added to the list of AWS lambda f
 
 ### Amazon DynamoDB
 
-Four (4) DynamoDB tables will be created by the CloudFormation stack, CustomerData, ContactIds, ChurnPrediction, and Sentiments. The **CustomerData** has PhoneNumber (e.164) as partition key and it requires the following attributes (string):
+Four (4) DynamoDB tables will be created by the CloudFormation stack, CustomerData, ContactIds, ChurnPrediction, and Sentiments. You only need to update the **CustomerData** table with the following attributes:
 
-- ```customerid```
-- ```contractedMonths```
-- ```email```
-- ```FirstName```
-- ```LastName```
+- ```PhoneNumber``` - (string) Customer phone number in e.164 format this could be your numebr
+- ```customerid``` - (string) Unique customer identifier, it needs to be one of the users customer ID used to train the model, for example 8966253.
+- ```contractedMonths``` - (string) Months left in the customer contract, for example 12.
+- ```email``` - (string) 
+- ```FirstName``` - (string)
+- ```LastName``` - (string)
+
+![dynamo](./img/dynamodb.png)
 
 ### Amazon S3 and CloudFront
 
