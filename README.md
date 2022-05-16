@@ -21,21 +21,6 @@ Users need to be familiar with the below AWS services:
 - Amazon API Gateway
 - Amazon S3 and CloudFront
 
-### Contact Lens for Amazon Connect
-
-This solution requires:
-
-- An existing Amazon Connect instance with Contact Lens for Amazon Connect enabled
-- Contact Flows enabled for "Real-Time and post call analytics" in the "Set recording and analytics behavior"
-- Create three (3) Real-time Contact Lens Rules with a "Sentiment - Time period" from the "Customer" for positive, negative, and neutral sentiments for the past 15 seconds of the contact
-
-![2](./img/clrules.png)
-
-- Assign a contact category called PositiveSentiment, NegativeSentiment, and NeutralSentiment for each of the rules
-- Add an action "Generate an EventBridge event" using the same name of the category
-
-![3](./img/clActions.png)
-
 ### Amazon SageMaker
 
 Clone the [github repo](https://github.com/aws-samples/real-time-churn-prediction-with-amazon-connect-and-amazon-sagemaker) into SageMaker Studio. 
@@ -105,6 +90,21 @@ This template is designed to automate the deployment of models in the Amazon Sag
 
 ![project12](./img/deployed_endpoints.png)
 
+
+### Contact Lens for Amazon Connect
+
+This solution requires:
+
+- An existing Amazon Connect instance with Contact Lens for Amazon Connect enabled
+- Contact Flows enabled for "Real-Time and post call analytics" in the "Set recording and analytics behavior"
+- Create three (3) Real-time Contact Lens Rules with a "Sentiment - Time period" from the "Customer" for positive, negative, and neutral sentiments for the past 15 seconds of the contact
+
+![2](./img/clrules.png)
+
+- Assign a contact category called PositiveSentiment, NegativeSentiment, and NeutralSentiment for each of the rules
+- Add an action "Generate an EventBridge event" using the same name of the category
+
+![3](./img/clActions.png)
 
 ### AWS CloudFormation Stack
 
