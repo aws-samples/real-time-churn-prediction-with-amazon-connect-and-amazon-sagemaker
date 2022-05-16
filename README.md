@@ -108,7 +108,7 @@ This template is designed to automate the deployment of models in the Amazon Sag
 
 ### AWS CloudFormation Stack
 
-The CloudFormation stack ![Summit2022-Template-v3.yaml](./cloudformation/Summit2022-Template-v3.yaml), in the cloudformation folder, will create all the serverless applications required for the solution. The input parameters of the CloudFormation stack include Amazon Connect ARN, Amazon Connect Instance, Amazon SageMaker Endpoint name, and Amazon SageMaker Feature Group Name.
+The CloudFormation stack [Summit2022-Template-v3.yaml](./cloudformation/Summit2022-Template-v3.yaml), in the cloudformation folder, will create all the serverless applications required for the solution. The input parameters of the CloudFormation stack include Amazon Connect ARN, Amazon Connect Instance, Amazon SageMaker Endpoint name, and Amazon SageMaker Feature Group Name.
 
 ![4](./img/cfParameters.png)
 
