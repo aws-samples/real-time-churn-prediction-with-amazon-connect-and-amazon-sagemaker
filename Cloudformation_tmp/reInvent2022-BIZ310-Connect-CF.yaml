@@ -1,0 +1,733 @@
+# MIT No Attribution
+
+# Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
+
+# Permission is hereby granted, free of charge, to any person obtaining a copy of this
+# software and associated documentation files (the "Software"), to deal in the Software
+# without restriction, including without limitation the rights to use, copy, modify,
+# merge, publish, distribute, sublicense, and/or sell copies of the Software, and to
+# permit persons to whom the Software is furnished to do so.
+
+# THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED,
+# INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A
+# PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT
+# HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION
+# OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE
+# SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+
+AWSTemplateFormatVersion: 2010-09-09
+Description: >
+  "CloudFormation for re:Invent 2022 - BIZ310 - Real-time churn prediction in AI powered contact centres - Contact Flows"
+
+Parameters:
+  AmazonConnectInstanceARN:
+    Default: "**** Enter the Full Amazon Connect Instance ARN ****"
+    Description: The Amazon Connect Instance ARN
+    Type: String
+  BasicQueueARN:
+    Default: "**** Enter the Full Basic Queue ARN ****"
+    Description: The Basic Queue ARN
+    Type: String
+  RetentionQueueARN:
+    Default: "**** Enter the Full Retention Queue ARN ****"
+    Description: The Retention Queue ARN
+    Type: String
+  LexV2BotID:
+    Default: "**** Enter the ID of the LexV2 Bot ****"
+    Description: LexV2 Bot ID
+    Type: String
+
+Resources:
+
+# Tasks Contact Flow
+  ContactFlowTask:
+    Type: AWS::Connect::ContactFlow
+    Properties:
+      Content: !Sub |
+        {
+          "Version": "2019-10-30",
+          "StartAction": "61eee341-76a0-4d86-bb5a-94d77f07c757",
+          "Metadata": {
+            "entryPointPosition": {
+              "x": 40,
+              "y": 40
+            },
+            "ActionMetadata": {
+              "61eee341-76a0-4d86-bb5a-94d77f07c757": {
+                "position": {
+                  "x": 123.2,
+                  "y": 163.20000000000002
+                }
+              },
+              "afdf6fe7-d393-4bf6-be3f-c0b76afd6c3f": {
+                "position": {
+                  "x": 678.4000000000001,
+                  "y": 144
+                }
+              },
+              "8961872e-a115-4890-b3c7-98ccc1428e37": {
+                "position": {
+                  "x": 380,
+                  "y": 144
+                },
+                "parameters": {
+                  "QueueId": {
+                    "displayName": "RetentionQueue"
+                  }
+                },
+                "queue": {
+                  "text": "RetentionQueue"
+                }
+              },
+              "5107034a-f3f5-4946-952b-82e49e5bb996": {
+                "position": {
+                  "x": 580,
+                  "y": 379.20000000000005
+                }
+              }
+            }
+          },
+          "Actions": [
+            {
+              "Parameters": {
+                "FlowLoggingBehavior": "Enabled"
+              },
+              "Identifier": "61eee341-76a0-4d86-bb5a-94d77f07c757",
+              "Type": "UpdateFlowLoggingBehavior",
+              "Transitions": {
+                "NextAction": "8961872e-a115-4890-b3c7-98ccc1428e37"
+              }
+            },
+            {
+              "Parameters": {},
+              "Identifier": "afdf6fe7-d393-4bf6-be3f-c0b76afd6c3f",
+              "Type": "TransferContactToQueue",
+              "Transitions": {
+                "NextAction": "5107034a-f3f5-4946-952b-82e49e5bb996",
+                "Errors": [
+                  {
+                    "NextAction": "5107034a-f3f5-4946-952b-82e49e5bb996",
+                    "ErrorType": "QueueAtCapacity"
+                  },
+                  {
+                    "NextAction": "5107034a-f3f5-4946-952b-82e49e5bb996",
+                    "ErrorType": "NoMatchingError"
+                  }
+                ]
+              }
+            },
+            {
+              "Parameters": {
+                "QueueId": "${RetentionQueueARN}"
+              },
+              "Identifier": "8961872e-a115-4890-b3c7-98ccc1428e37",
+              "Type": "UpdateContactTargetQueue",
+              "Transitions": {
+                "NextAction": "afdf6fe7-d393-4bf6-be3f-c0b76afd6c3f",
+                "Errors": [
+                  {
+                    "NextAction": "5107034a-f3f5-4946-952b-82e49e5bb996",
+                    "ErrorType": "NoMatchingError"
+                  }
+                ]
+              }
+            },
+            {
+              "Parameters": {},
+              "Identifier": "5107034a-f3f5-4946-952b-82e49e5bb996",
+              "Type": "DisconnectParticipant",
+              "Transitions": {}
+            }
+          ]
+        }
+
+      Description: Tasks Contact Flow
+      InstanceArn: !Ref AmazonConnectInstanceARN
+      Name: 2.reInvent-Tasks
+      State: ACTIVE
+      Type: CONTACT_FLOW
+
+# Incoming Contact Flow
+  ContactFlowIncoming:
+    Type: AWS::Connect::ContactFlow
+    Properties:
+      Content: !Sub |
+        {
+          "Version": "2019-10-30",
+          "StartAction": "ae3966a1-ebc6-41e3-8237-a7cbca8659d4",
+          "Metadata": {
+            "entryPointPosition": {
+              "x": 14.4,
+              "y": 14.4
+            },
+            "ActionMetadata": {
+              "ae3966a1-ebc6-41e3-8237-a7cbca8659d4": {
+                "position": {
+                  "x": 40.800000000000004,
+                  "y": 164
+                }
+              },
+              "8f71e817-5f20-4f6b-ae41-2a86401296c2": {
+                "position": {
+                  "x": 56,
+                  "y": 336
+                }
+              },
+              "4f149db0-fb18-4f04-9751-1f3495bb2cd4": {
+                "position": {
+                  "x": 365.6,
+                  "y": 522.4
+                }
+              },
+              "006a7e00-4664-46b7-b3dd-ac39734ae865": {
+                "position": {
+                  "x": 352.8,
+                  "y": 292
+                }
+              },
+              "ceb1c83e-7310-4dee-9b43-1e5186116e39": {
+                "position": {
+                  "x": 54.400000000000006,
+                  "y": 520
+                },
+                "overrideConsoleVoice": false
+              },
+              "8c956eef-1264-4f94-87ff-6833037e0cb1": {
+                "position": {
+                  "x": 301.6,
+                  "y": 52
+                },
+                "dynamicMetadata": {}
+              },
+              "29dee670-0fff-4ace-8b48-00fea708f82f": {
+                "position": {
+                  "x": 2447.2000000000003,
+                  "y": 19.200000000000003
+                }
+              },
+              "2139df13-e56a-48b4-95f4-a3fd134a18da": {
+                "position": {
+                  "x": 2618.4,
+                  "y": 392.8
+                }
+              },
+              "44a7641e-984f-43f3-9a70-73a4ebe90498": {
+                "position": {
+                  "x": 2635.2000000000003,
+                  "y": 597.6
+                }
+              },
+              "5bffcccf-5352-47d4-8953-2c6440a3e86f": {
+                "position": {
+                  "x": 562.4,
+                  "y": 40.800000000000004
+                },
+                "parameters": {
+                  "Attributes": {
+                    "customerid": {
+                      "useDynamic": true
+                    },
+                    "firstName": {
+                      "useDynamic": true
+                    },
+                    "lastName": {
+                      "useDynamic": true
+                    },
+                    "contractedMonths": {
+                      "useDynamic": true
+                    },
+                    "phoneNumber": {
+                      "useDynamic": true
+                    },
+                    "email": {
+                      "useDynamic": true
+                    },
+                    "hashValue": {
+                      "useDynamic": true
+                    }
+                  }
+                },
+                "dynamicParams": [
+                  "customerid",
+                  "firstName",
+                  "lastName",
+                  "contractedMonths",
+                  "phoneNumber",
+                  "email",
+                  "hashValue"
+                ]
+              },
+              "7a63aba6-03c1-454f-afa6-4eef2dc8f42b": {
+                "position": {
+                  "x": 2096,
+                  "y": -30.400000000000002
+                }
+              },
+              "6fcad9a5-6a5b-4cb0-a0e6-046876bb8526": {
+                "position": {
+                  "x": 1600,
+                  "y": 5.6000000000000005
+                },
+                "dynamicMetadata": {}
+              },
+              "2660417b-2e85-425a-ac1b-a0669549ad30": {
+                "position": {
+                  "x": 1629.6000000000001,
+                  "y": 356.8
+                }
+              },
+              "a55bb9f7-0698-4722-bbfd-cfae5defb313": {
+                "position": {
+                  "x": 825.6,
+                  "y": 40
+                }
+              },
+              "03241672-8698-4e89-a49d-b4a88f6a298f": {
+                "position": {
+                  "x": 1330.4,
+                  "y": 24.8
+                },
+                "parameters": {
+                  "Attributes": {
+                    "customerSentiment": {
+                      "useDynamic": true
+                    }
+                  }
+                },
+                "dynamicParams": [
+                  "customerSentiment"
+                ]
+              },
+              "325f8335-720e-4c9f-9510-4d7360c65192": {
+                "position": {
+                  "x": 1089.6000000000001,
+                  "y": 48
+                },
+                "parameters": {
+                  "LexV2Bot": {
+                    "AliasArn": {
+                      "useDynamic": false,
+                      "useLexBotDropdown": true,
+                      "lexV2BotName": "reInvent2002-LexBot"
+                    }
+                  }
+                },
+                "useLexBotDropdown": true,
+                "lexV2BotName": "reInvent2002-LexBot",
+                "conditionMetadata": [
+                  {
+                    "id": "a3119770-88e0-456e-85b8-b9b5a1a348a0",
+                    "operator": {
+                      "name": "Equals",
+                      "value": "Equals",
+                      "shortDisplay": "="
+                    },
+                    "value": "Agent"
+                  },
+                  {
+                    "id": "ed8b19de-19e6-4b83-8c74-705a47c3c9bf",
+                    "operator": {
+                      "name": "Equals",
+                      "value": "Equals",
+                      "shortDisplay": "="
+                    },
+                    "value": "FallbackIntent"
+                  }
+                ]
+              },
+              "95bf16b1-031e-422b-8b83-01b562911870": {
+                "position": {
+                  "x": 1841.6000000000001,
+                  "y": 22.400000000000002
+                },
+                "conditionMetadata": [
+                  {
+                    "id": "f94367ec-1435-4a09-9544-2fc600242cc6",
+                    "operator": {
+                      "name": "Equals",
+                      "value": "Equals",
+                      "shortDisplay": "="
+                    },
+                    "value": "NEGATIVE"
+                  },
+                  {
+                    "id": "03851dd5-c2d4-416f-9da6-405a31f7c25e",
+                    "operator": {
+                      "name": "Equals",
+                      "value": "Equals",
+                      "shortDisplay": "="
+                    },
+                    "value": "POSITIVE"
+                  }
+                ]
+              },
+              "28b1864c-89fa-43f9-a3b1-c1c523c522e2": {
+                "position": {
+                  "x": 2390.4,
+                  "y": 288.8
+                },
+                "parameters": {
+                  "QueueId": {
+                    "displayName": "BasicQueue"
+                  }
+                },
+                "queue": {
+                  "text": "BasicQueue"
+                }
+              },
+              "c176c71b-ac83-481f-a157-3c4ee01727e6": {
+                "position": {
+                  "x": 2103.2000000000003,
+                  "y": 155.20000000000002
+                }
+              }
+            }
+          },
+          "Actions": [
+            {
+              "Parameters": {
+                "FlowLoggingBehavior": "Enabled"
+              },
+              "Identifier": "ae3966a1-ebc6-41e3-8237-a7cbca8659d4",
+              "Type": "UpdateFlowLoggingBehavior",
+              "Transitions": {
+                "NextAction": "8f71e817-5f20-4f6b-ae41-2a86401296c2"
+              }
+            },
+            {
+              "Parameters": {
+                "RecordingBehavior": {
+                  "RecordedParticipants": [
+                    "Agent",
+                    "Customer"
+                  ]
+                },
+                "AnalyticsBehavior": {
+                  "Enabled": "True",
+                  "AnalyticsLanguage": "en-US",
+                  "AnalyticsRedactionBehavior": "Disabled",
+                  "AnalyticsRedactionResults": "None",
+                  "AnalyticsMode": "RealTime"
+                }
+              },
+              "Identifier": "8f71e817-5f20-4f6b-ae41-2a86401296c2",
+              "Type": "UpdateContactRecordingBehavior",
+              "Transitions": {
+                "NextAction": "ceb1c83e-7310-4dee-9b43-1e5186116e39"
+              }
+            },
+            {
+              "Parameters": {},
+              "Identifier": "4f149db0-fb18-4f04-9751-1f3495bb2cd4",
+              "Type": "DisconnectParticipant",
+              "Transitions": {}
+            },
+            {
+              "Parameters": {
+                "Text": "Sorry we had an issue with your phone number or you are not in the database."
+              },
+              "Identifier": "006a7e00-4664-46b7-b3dd-ac39734ae865",
+              "Type": "MessageParticipant",
+              "Transitions": {
+                "NextAction": "4f149db0-fb18-4f04-9751-1f3495bb2cd4",
+                "Errors": [
+                  {
+                    "NextAction": "4f149db0-fb18-4f04-9751-1f3495bb2cd4",
+                    "ErrorType": "NoMatchingError"
+                  }
+                ]
+              }
+            },
+            {
+              "Parameters": {
+                "TextToSpeechVoice": "Joanna"
+              },
+              "Identifier": "ceb1c83e-7310-4dee-9b43-1e5186116e39",
+              "Type": "UpdateContactTextToSpeechVoice",
+              "Transitions": {
+                "NextAction": "8c956eef-1264-4f94-87ff-6833037e0cb1"
+              }
+            },
+            {
+              "Parameters": {
+                "LambdaFunctionARN": "arn:aws:lambda:${AWS::Region}:${AWS::AccountId}:function:CustomerProfiles",
+                "InvocationTimeLimitSeconds": "3"
+              },
+              "Identifier": "8c956eef-1264-4f94-87ff-6833037e0cb1",
+              "Type": "InvokeLambdaFunction",
+              "Transitions": {
+                "NextAction": "5bffcccf-5352-47d4-8953-2c6440a3e86f",
+                "Errors": [
+                  {
+                    "NextAction": "006a7e00-4664-46b7-b3dd-ac39734ae865",
+                    "ErrorType": "NoMatchingError"
+                  }
+                ]
+              }
+            },
+            {
+              "Parameters": {},
+              "Identifier": "29dee670-0fff-4ace-8b48-00fea708f82f",
+              "Type": "TransferContactToQueue",
+              "Transitions": {
+                "NextAction": "2139df13-e56a-48b4-95f4-a3fd134a18da",
+                "Errors": [
+                  {
+                    "NextAction": "2139df13-e56a-48b4-95f4-a3fd134a18da",
+                    "ErrorType": "QueueAtCapacity"
+                  },
+                  {
+                    "NextAction": "2139df13-e56a-48b4-95f4-a3fd134a18da",
+                    "ErrorType": "NoMatchingError"
+                  }
+                ]
+              }
+            },
+            {
+              "Parameters": {
+                "Text": "Sorry there was an error with the system, please call us back later."
+              },
+              "Identifier": "2139df13-e56a-48b4-95f4-a3fd134a18da",
+              "Type": "MessageParticipant",
+              "Transitions": {
+                "NextAction": "44a7641e-984f-43f3-9a70-73a4ebe90498",
+                "Errors": [
+                  {
+                    "NextAction": "44a7641e-984f-43f3-9a70-73a4ebe90498",
+                    "ErrorType": "NoMatchingError"
+                  }
+                ]
+              }
+            },
+            {
+              "Parameters": {},
+              "Identifier": "44a7641e-984f-43f3-9a70-73a4ebe90498",
+              "Type": "DisconnectParticipant",
+              "Transitions": {}
+            },
+            {
+              "Parameters": {
+                "Attributes": {
+                  "customerid": "$.External.customerid",
+                  "firstName": "$.External.firstName",
+                  "lastName": "$.External.lastName",
+                  "contractedMonths": "$.External.contractedMonths",
+                  "phoneNumber": "$.CustomerEndpoint.Address",
+                  "email": "$.External.email",
+                  "hashValue": "$.External.hashValue"
+                }
+              },
+              "Identifier": "5bffcccf-5352-47d4-8953-2c6440a3e86f",
+              "Type": "UpdateContactAttributes",
+              "Transitions": {
+                "NextAction": "a55bb9f7-0698-4722-bbfd-cfae5defb313",
+                "Errors": [
+                  {
+                    "NextAction": "a55bb9f7-0698-4722-bbfd-cfae5defb313",
+                    "ErrorType": "NoMatchingError"
+                  }
+                ]
+              }
+            },
+            {
+              "Parameters": {
+                "Text": "I am sorry to hear you are not feeling happy today, let me find out somebody to help you ASAP."
+              },
+              "Identifier": "7a63aba6-03c1-454f-afa6-4eef2dc8f42b",
+              "Type": "MessageParticipant",
+              "Transitions": {
+                "NextAction": "28b1864c-89fa-43f9-a3b1-c1c523c522e2",
+                "Errors": [
+                  {
+                    "NextAction": "28b1864c-89fa-43f9-a3b1-c1c523c522e2",
+                    "ErrorType": "NoMatchingError"
+                  }
+                ]
+              }
+            },
+            {
+              "Parameters": {
+                "LambdaFunctionARN": "arn:aws:lambda:${AWS::Region}:${AWS::AccountId}:function:LexSentimentUpdate",
+                "InvocationTimeLimitSeconds": "3"
+              },
+              "Identifier": "6fcad9a5-6a5b-4cb0-a0e6-046876bb8526",
+              "Type": "InvokeLambdaFunction",
+              "Transitions": {
+                "NextAction": "95bf16b1-031e-422b-8b83-01b562911870",
+                "Errors": [
+                  {
+                    "NextAction": "95bf16b1-031e-422b-8b83-01b562911870",
+                    "ErrorType": "NoMatchingError"
+                  }
+                ]
+              }
+            },
+            {
+              "Parameters": {
+                "Text": "Sorry there was an error capturing your request, you will be transferred to an agent."
+              },
+              "Identifier": "2660417b-2e85-425a-ac1b-a0669549ad30",
+              "Type": "MessageParticipant",
+              "Transitions": {
+                "NextAction": "28b1864c-89fa-43f9-a3b1-c1c523c522e2",
+                "Errors": [
+                  {
+                    "NextAction": "28b1864c-89fa-43f9-a3b1-c1c523c522e2",
+                    "ErrorType": "NoMatchingError"
+                  }
+                ]
+              }
+            },
+            {
+              "Parameters": {
+                "Text": "Hi $.External.firstName $.External.lastName welcome to the churn prediction re Invent workshop."
+              },
+              "Identifier": "a55bb9f7-0698-4722-bbfd-cfae5defb313",
+              "Type": "MessageParticipant",
+              "Transitions": {
+                "NextAction": "325f8335-720e-4c9f-9510-4d7360c65192",
+                "Errors": [
+                  {
+                    "NextAction": "325f8335-720e-4c9f-9510-4d7360c65192",
+                    "ErrorType": "NoMatchingError"
+                  }
+                ]
+              }
+            },
+            {
+              "Parameters": {
+                "Attributes": {
+                  "customerSentiment": "$.Lex.SentimentResponse.Label"
+                }
+              },
+              "Identifier": "03241672-8698-4e89-a49d-b4a88f6a298f",
+              "Type": "UpdateContactAttributes",
+              "Transitions": {
+                "NextAction": "6fcad9a5-6a5b-4cb0-a0e6-046876bb8526",
+                "Errors": [
+                  {
+                    "NextAction": "6fcad9a5-6a5b-4cb0-a0e6-046876bb8526",
+                    "ErrorType": "NoMatchingError"
+                  }
+                ]
+              }
+            },
+            {
+              "Parameters": {
+                "Text": "In a few words tell us how you feel before we transfer you to an agent. ",
+                "LexV2Bot": {
+                  "AliasArn": "arn:aws:lex:${AWS::Region}:${AWS::AccountId}:bot-alias/${LexV2BotID}/TSTALIASID"
+                }
+              },
+              "Identifier": "325f8335-720e-4c9f-9510-4d7360c65192",
+              "Type": "ConnectParticipantWithLexBot",
+              "Transitions": {
+                "NextAction": "2660417b-2e85-425a-ac1b-a0669549ad30",
+                "Conditions": [
+                  {
+                    "NextAction": "03241672-8698-4e89-a49d-b4a88f6a298f",
+                    "Condition": {
+                      "Operator": "Equals",
+                      "Operands": [
+                        "Agent"
+                      ]
+                    }
+                  },
+                  {
+                    "NextAction": "03241672-8698-4e89-a49d-b4a88f6a298f",
+                    "Condition": {
+                      "Operator": "Equals",
+                      "Operands": [
+                        "FallbackIntent"
+                      ]
+                    }
+                  }
+                ],
+                "Errors": [
+                  {
+                    "NextAction": "03241672-8698-4e89-a49d-b4a88f6a298f",
+                    "ErrorType": "NoMatchingCondition"
+                  },
+                  {
+                    "NextAction": "2660417b-2e85-425a-ac1b-a0669549ad30",
+                    "ErrorType": "NoMatchingError"
+                  }
+                ]
+              }
+            },
+            {
+              "Parameters": {
+                "ComparisonValue": "$.Lex.SentimentResponse.Label"
+              },
+              "Identifier": "95bf16b1-031e-422b-8b83-01b562911870",
+              "Type": "Compare",
+              "Transitions": {
+                "NextAction": "28b1864c-89fa-43f9-a3b1-c1c523c522e2",
+                "Conditions": [
+                  {
+                    "NextAction": "7a63aba6-03c1-454f-afa6-4eef2dc8f42b",
+                    "Condition": {
+                      "Operator": "Equals",
+                      "Operands": [
+                        "NEGATIVE"
+                      ]
+                    }
+                  },
+                  {
+                    "NextAction": "c176c71b-ac83-481f-a157-3c4ee01727e6",
+                    "Condition": {
+                      "Operator": "Equals",
+                      "Operands": [
+                        "POSITIVE"
+                      ]
+                    }
+                  }
+                ],
+                "Errors": [
+                  {
+                    "NextAction": "28b1864c-89fa-43f9-a3b1-c1c523c522e2",
+                    "ErrorType": "NoMatchingCondition"
+                  }
+                ]
+              }
+            },
+            {
+              "Parameters": {
+                "QueueId": "${BasicQueueARN}"
+              },
+              "Identifier": "28b1864c-89fa-43f9-a3b1-c1c523c522e2",
+              "Type": "UpdateContactTargetQueue",
+              "Transitions": {
+                "NextAction": "29dee670-0fff-4ace-8b48-00fea708f82f",
+                "Errors": [
+                  {
+                    "NextAction": "2139df13-e56a-48b4-95f4-a3fd134a18da",
+                    "ErrorType": "NoMatchingError"
+                  }
+                ]
+              }
+            },
+            {
+              "Parameters": {
+                "Text": "I am glad to hear you are feeling happy and energized today. Let me connect you to an agent now."
+              },
+              "Identifier": "c176c71b-ac83-481f-a157-3c4ee01727e6",
+              "Type": "MessageParticipant",
+              "Transitions": {
+                "NextAction": "28b1864c-89fa-43f9-a3b1-c1c523c522e2",
+                "Errors": [
+                  {
+                    "NextAction": "28b1864c-89fa-43f9-a3b1-c1c523c522e2",
+                    "ErrorType": "NoMatchingError"
+                  }
+                ]
+              }
+            }
+          ]
+        }
+
+      Description: Incoming Contact Flow
+      InstanceArn: !Ref AmazonConnectInstanceARN
+      Name: 1.reInvent-Incoming
+      State: ACTIVE
+      Type: CONTACT_FLOW

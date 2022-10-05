@@ -1,0 +1,1599 @@
+# MIT No Attribution
+
+# Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
+
+# Permission is hereby granted, free of charge, to any person obtaining a copy of this
+# software and associated documentation files (the "Software"), to deal in the Software
+# without restriction, including without limitation the rights to use, copy, modify,
+# merge, publish, distribute, sublicense, and/or sell copies of the Software, and to
+# permit persons to whom the Software is furnished to do so.
+
+# THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED,
+# INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A
+# PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT
+# HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION
+# OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE
+# SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+
+AWSTemplateFormatVersion: 2010-09-09
+Description: >
+  "CloudFormation for re:Invent 2022 - BIZ310 - Real-time churn prediction in AI powered contact centres - Lambdas, Kinesis, API Gateway, EventBridge, Step Functions, DynamoDB tables, Lex, S3 Bucket, and CloudFront Distribution"
+
+Parameters:
+  AmazonConnectInstanceARN:
+    Default: "**** Enter the Full Amazon Connect Instance ARN ****"
+    Description: The Amazon Connect Instance ARN
+    Type: String
+  SageMakerFeatureGroupName:
+    Default: "fg-contact-center-data"
+    Description: The Amazon SageMaker Feature Group Name
+    Type: String
+  SageMakerEndPointName:
+    Default: "sagemaker-endpoint-xgboost-customerchurn"
+    Description: The Amazon SageMaker Endpoint Name
+    Type: String
+  CustomerProfilesDomain:
+    Default: "**** Enter the Customer Profiles Domain ****"
+    Description: The Amazon Connect Customers Profile Domain (amazon-connect-[alias])
+    Type: String
+  EmailForNotifications:
+    Default: "**** Enter an email address for Contact Lens Notifications ****"
+    Description: Email for Contact Lens Notification
+    Type: String
+
+# API Gateway URLs, Queue Retention ARN, and LexV2Bot ARN to be used in the Website
+Outputs:
+  apiGatewayInvokeURLchurn:
+    Description: API Endpoint to capture Churn updates
+    Value: !Sub https://${reInvent2022AgentInterfaceRestApi}.execute-api.${AWS::Region}.amazonaws.com/prod
+  apiGatewayInvokeURLcontract:
+    Description: API Endpoint to update contracted months
+    Value: !Sub https://${reInvent2022AgentInterfaceRestApi}.execute-api.${AWS::Region}.amazonaws.com/prod/update
+  LexV2BotARN:
+    Description: The ARN of the LexV2 Bot
+    Value: !GetAtt IVR.Arn
+  CloudfrontEndpoint:
+      Description: Endpoint for Custom CCP distribution
+      Value: !Join
+        - ''
+        - - 'https://'
+          - !GetAtt [CFCloudFrontDistribution, DomainName]
+  CustomCCPS3Bucket:
+    Description: Bucket for the CustomCCP Website
+    Value: !Ref createCustomCCPS3Bucket
+
+Resources:
+
+# Sentiments DynamoDB Table, partition key contact Id
+  SentimentsDDBTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      AttributeDefinitions:
+        - AttributeName: ContactId
+          AttributeType: S
+      KeySchema:
+        - AttributeName: ContactId
+          KeyType: HASH
+      ProvisionedThroughput:
+        ReadCapacityUnits: 5
+        WriteCapacityUnits: 5
+      TableName: reInvent2022-Sentiments
+      TimeToLiveSpecification:
+        AttributeName: ttl
+        Enabled: true
+
+# Contacts ID DynamoDB Table, store customer ID per contact ID
+  ContactIdsDDBTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      AttributeDefinitions:
+        - AttributeName: ContactId
+          AttributeType: S
+      KeySchema:
+        - AttributeName: ContactId
+          KeyType: HASH
+      ProvisionedThroughput:
+        ReadCapacityUnits: 5
+        WriteCapacityUnits: 5
+      TableName: reInvent2022-ContactIds
+      TimeToLiveSpecification:
+        AttributeName: ttl
+        Enabled: true
+
+# Churn prediction table storing all the predictions per contact ID,
+# partition key Contact ID and sort key Time
+  ChurnPredictionDDBTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      AttributeDefinitions:
+        - AttributeName: ContactId
+          AttributeType: S
+        - AttributeName: When
+          AttributeType: S
+      KeySchema:
+        - AttributeName: ContactId
+          KeyType: HASH
+        - AttributeName: When
+          KeyType: RANGE
+      ProvisionedThroughput:
+        ReadCapacityUnits: 5
+        WriteCapacityUnits: 5
+      TableName: reInvent2022-ChurnPrediction
+      TimeToLiveSpecification:
+        AttributeName: ttl
+        Enabled: true
+
+# IAM Role for Lambda functions
+  LambdasIAMRole:
+    Type: "AWS::IAM::Role"
+    DependsOn:
+      - ChurnPredictionDDBTable
+      - ContactIdsDDBTable
+      - SentimentsDDBTable
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service:
+                - lambda.amazonaws.com
+            Action:
+                - "sts:AssumeRole"
+      Description: A role to allow all the functions in the re:Invent2022 BIZ310 Project
+      Policies:
+        - PolicyName: reInvent2022role
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Effect: Allow
+                Action:
+                  - dynamodb:GetItem
+                  - dynamodb:UpdateItem
+                  - dynamodb:PutItem
+                  - dynamodb:PartiQLSelect
+                Resource:
+                  - !GetAtt ContactIdsDDBTable.Arn
+                  - !GetAtt ChurnPredictionDDBTable.Arn
+                  - !GetAtt SentimentsDDBTable.Arn
+              - Effect: Allow
+                Action:
+                  - profile:SearchProfiles
+                  - profile:UpdateProfile
+                Resource:
+                  - !Sub arn:aws:profile:${AWS::Region}:${AWS::AccountId}:domains/${CustomerProfilesDomain}
+              - Effect: Allow
+                Action:
+                  - connect:AssociateInstanceStorageConfig
+                  - connect:UpdateContactAttributes
+                Resource:
+                  - !Ref AmazonConnectInstanceARN
+                  - !Sub ${AmazonConnectInstanceARN}/*
+              - Effect: Allow
+                Action:
+                  - logs:CreateLogGroup
+                  - logs:CreateLogStream
+                  - logs:PutLogEvents
+                  - sagemaker:*
+                  - kinesis:*
+                  - iam:PutRolePolicy
+                Resource: "*"
+              - Effect: Allow
+                Action:
+                  -  states:StartExecution
+                Resource:
+                  - !Sub arn:aws:states:${AWS::Region}:${AWS::AccountId}:stateMachine:ContractCancelled
+
+# IAM Service Link Role for Lex
+  LexServiceLinkRole:
+    Type: 'AWS::IAM::ServiceLinkedRole'
+    Properties:
+      AWSServiceName: lexv2.amazonaws.com
+      Description: AWSServiceRoleForLexV2Bots
+      CustomSuffix: reInvent2022
+
+# IAM Role for Step Functions
+  StepsIAMRole:
+    Type: 'AWS::IAM::Role'
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+        - Effect: Allow
+          Principal:
+            Service: !Sub 'states.${AWS::Region}.amazonaws.com'
+          Action: 'sts:AssumeRole'
+      Policies:
+      - PolicyName: ConnectTasksAPI
+        PolicyDocument:
+          Statement:
+          - Effect: Allow
+            Action:
+              - connect:StartTaskContact
+            Resource:
+              - !Sub ${AmazonConnectInstanceARN}/*
+          - Effect: Allow
+            Action:
+              - logs:CreateLogGroup
+              - logs:CreateLogStream
+              - logs:PutLogEvents
+            Resource: "*"
+
+# SNS Topic to send email with notification about negative sentiment
+  SNSforNegativeSentiment:
+    Type: AWS::SNS::Topic
+    Properties:
+      TopicName: NegativeSentiment
+
+# Subscription to send email with negative sentiment
+  EmailSubscription:
+    Type: AWS::SNS::Subscription
+    Properties:
+      Protocol: email
+      Endpoint: !Ref EmailForNotifications
+      TopicArn: !Ref 'SNSforNegativeSentiment'
+
+
+# EventBridge Rule to capture Negative Sentiment based on Contact Lens Events
+  NegSentimentEventBridgeRule:
+    Type: AWS::Events::Rule
+    Properties:
+      Description: Rule to capture Negative Sentiment based on Contact Lens Events
+      EventBusName: default
+      EventPattern:
+        source:
+          - aws.connect
+        detail-type:
+          - "Contact Lens Realtime Rules Matched"
+        detail:
+          actionName:
+            - "LongNegativeSentiment"
+      State: ENABLED
+      Targets:
+        - Arn: !Ref SNSforNegativeSentiment
+          Id: Id1234
+          InputTransformer:
+            InputPathsMap:
+              Region: "$.region"
+              ContactArn: "$.detail.contactArn"
+              RuleName: "$.detail.ruleName"
+              Time: "$.time"
+            InputTemplate: |
+              "There is a call in <Region> with <RuleName>, customer has been experiencing negative sentiment since <Time>. Please find out more details using the Contact Id <ContactArn> and help the agent ASAP to manage this siutation or call the customer back before they churn to the competition."
+
+
+# PandasLayerForLambda
+  PandasLayer:
+    Type: AWS::Lambda::LayerVersion
+    Properties:
+      CompatibleRuntimes:
+        - python3.9
+      Content:
+        S3Bucket: nm-reinvent2022-files
+        S3Key: pandas/python.zip
+      Description: Pandas Lambda Layer
+      LayerName: pandas
+      LicenseInfo: MIT
+
+# NumpyLayerForLambda
+  NumpyLayer:
+    Type: AWS::Lambda::LayerVersion
+    Properties:
+      CompatibleRuntimes:
+        - python3.9
+      Content:
+        S3Bucket: nm-reinvent2022-files
+        S3Key: numpy/python.zip
+      Description: Numpy Lambda Layer
+      LayerName: numpy
+      LicenseInfo: MIT
+
+# Lambda Function to retrieve customer information from Profiles
+  LambdareInvent2022CustomerProfiles:
+    Type: AWS::Lambda::Function
+    Properties:
+      Description: Function to retrieve customer information from Profiles
+      Environment:
+        Variables:
+          ContactIdTableName: reInvent2022-ContactIds
+          ProfilesDomain: !Ref CustomerProfilesDomain
+          InstanceARN: !Ref AmazonConnectInstanceARN
+      Code:
+        ZipFile: |
+            # MIT No Attribution
+
+            # Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
+
+            # Permission is hereby granted, free of charge, to any person obtaining a copy of this
+            # software and associated documentation files (the "Software"), to deal in the Software
+            # without restriction, including without limitation the rights to use, copy, modify,
+            # merge, publish, distribute, sublicense, and/or sell copies of the Software, and to
+            # permit persons to whom the Software is furnished to do so.
+
+            # THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED,
+            # INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A
+            # PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT
+            # HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION
+            # OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE
+            # SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+
+            import json
+            import boto3
+            import os
+            import datetime
+            import time
+
+            profiles = boto3.client('customer-profiles')
+            dynamodb = boto3.resource('dynamodb')
+            dynamodbclient = boto3.client('dynamodb')
+
+            ProfilesDomain= os.environ['ProfilesDomain']
+            ContactIdTableName= os.environ['ContactIdTableName']
+            InstanceArn = os.environ['InstanceARN']
+
+            def lambda_handler(event, context):
+
+              InstanceId = InstanceArn[-36:]
+              #Customer phone number passed from Amazon Connect via JSON
+              phoneNumber = event ['Details']['ContactData']['CustomerEndpoint']['Address']
+              #ContactId passed from Amazon Connect via JSON
+              ContactId = event ['Details']['ContactData']['ContactId']
+
+              # expires after one day
+              expiryTimestamp = int(time.time() + 24*60*60)
+
+              #customer lookup in Customer Profiles via phone number
+              response = profiles.search_profiles(
+                  DomainName=ProfilesDomain,
+                  KeyName='_phone',
+                  Values=[phoneNumber])
+
+              Items = response['Items']
+
+              #If record exists write values to variables
+
+              for Item in Items:
+
+                if not "FirstName" in Item:
+                    print("No FirstName in profile")
+                else:
+                  customerid = Item['AccountNumber']
+                  firstName = Item['FirstName']
+                  lastName = Item['LastName']
+                  email = Item['EmailAddress']
+                  contractedMonths = Item['AdditionalInformation']
+                  customerProfile = Item["ProfileId"]
+
+                  Input = json.dumps({'ContactId': ContactId, 'customerid':customerid, 'InstanceId': InstanceId})
+                  print(Input)
+
+                  Time = str(datetime.datetime.utcnow())
+
+                  contactResp = dynamodbclient.put_item(
+                     TableName=ContactIdTableName,
+                     Item={
+                       'ContactId':{
+                         'S': ContactId
+                       },
+                       'customerid':{
+                         'S': customerid
+                       },
+                       'When':{
+                         'S': Time
+                       },
+                       'customerProfile':{
+                           'S': customerProfile
+                       },
+                       'ttl': {
+                          'N': str(expiryTimestamp)
+                       }
+                     },
+                     ReturnConsumedCapacity='TOTAL'
+                   )
+                  print(contactResp)
+
+                  #Return variables to Amazon Connect
+                  return {'message': 'Success',
+                           'customerid' : customerid,
+                           'firstName' : firstName,
+                           'lastName' : lastName,
+                           'email' : email,
+                           'contractedMonths': contractedMonths,
+                           'customerProfile': customerProfile
+                  }
+
+      FunctionName: CustomerProfiles
+      Handler: index.lambda_handler
+      Role: !GetAtt LambdasIAMRole.Arn
+      Runtime: python3.9
+
+# Permission for Connect to access Lambda Function
+  ConnectFunctionPolicyLambdaCustomerProfiles:
+    Type: AWS::Lambda::Permission
+    DependsOn: LambdareInvent2022CustomerProfiles
+    Properties:
+      FunctionName: !Sub 'CustomerProfiles'
+      Action: "lambda:InvokeFunction"
+      Principal:  "connect.amazonaws.com"
+      SourceAccount: !Sub ${AWS::AccountId}
+      SourceArn: !Ref AmazonConnectInstanceARN
+
+# Lambda Function to get the Churn Prediction based on Lex Sentiment
+  LambdareInvent2022LexSentimentUpdate:
+    Type: AWS::Lambda::Function
+    DependsOn:
+      - PandasLayer
+      - NumpyLayer
+    Properties:
+      Description: Function to get the Churn Prediction based on Lex Sentiment
+      Environment:
+        Variables:
+          ChurnPredictionTable: reInvent2022-ChurnPrediction
+          ContactIdTableName: reInvent2022-ContactIds
+          EndPointName: !Ref SageMakerEndPointName
+          SageMakerFGName: !Ref SageMakerFeatureGroupName
+          SentimentsTable: reInvent2022-Sentiments
+      Layers:
+        - !Ref PandasLayer
+        - !Ref NumpyLayer
+      Code:
+        ZipFile: |
+            # MIT No Attribution
+
+            # Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
+
+            # Permission is hereby granted, free of charge, to any person obtaining a copy of this
+            # software and associated documentation files (the "Software"), to deal in the Software
+            # without restriction, including without limitation the rights to use, copy, modify,
+            # merge, publish, distribute, sublicense, and/or sell copies of the Software, and to
+            # permit persons to whom the Software is furnished to do so.
+
+            # THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED,
+            # INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A
+            # PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT
+            # HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION
+            # OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE
+            # SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+
+            import json
+            import base64
+            import boto3
+            import os
+            # This funciton requires a pandas layer
+            import pandas as pd
+            import io
+            import csv
+            import datetime
+            import numpy
+            import time
+
+            # Environment Variables including DynamoDB Churn predictions and sentiment tables, SageMaker
+            # Feature Group and EndPoint
+
+            ContactIdTableName= os.environ['ContactIdTableName']
+            ChurnPredictionTable = os.environ['ChurnPredictionTable']
+            SentimentsTable = os.environ['SentimentsTable']
+            sagemakerFGname = os.environ['SageMakerFGName']
+            endPointName = os.environ['EndPointName']
+
+            boto_session = boto3.Session()
+            ddbclient = boto3.client('dynamodb')
+            dynamodb = boto3.resource('dynamodb')
+            region = boto_session.region_name
+            runtime_client = boto3.client("runtime.sagemaker")
+
+            # This lambda reads the Event details from Kinesis, get customer features from SageMaker Feature Store, inference to the SageMaker endpoint and update
+            # sentiments and churn prediction tables.
+            def lambda_handler(event, context):
+                print('Incoming event: ', event)
+
+                # expires after one day
+                expiryTimestamp = int(time.time() + 24*3600)
+
+                # CALL UPDATE RECORD with the new Table
+                def FeatureValue (**kwargs):
+                    try:
+                        result = dict()
+                        for key, value in kwargs.items():
+                            if value is not None:
+                                result[key] = value
+                                #print(result)
+                        return result
+                    except Exception as e:
+                        print("error is: " + e)
+                        return {"Error"}
+
+
+                # This function returns the customerid for the specific ContactId
+                def getcustomerid (ContactId):
+                    try:
+                        table = dynamodb.Table(ContactIdTableName)
+                        response = table.get_item(Key={'ContactId' : ContactId})
+                        if 'Item' in response:
+                            customer = response['Item']['customerid']
+                            #print(customer)
+                            return customer
+                    except Exception as e:
+                        print(e)
+                        return {"Error"}
+
+                # Update the churn associated to the Contact ID in the churn prediction table
+                def updateTransaction(ContactId,churn_pred,expiryTimestamp):
+                    Time = str(datetime.datetime.utcnow())
+                    print(Time)
+                    responseContact = ddbclient.put_item(
+                        TableName=ChurnPredictionTable,
+                        Item={
+                            'ContactId':{
+                                'S': ContactId
+                            },
+                            'When':{
+                                'S': Time
+                            },
+                            'ChurnPrediction':{
+                                'N':churn_pred
+                            },
+                            'ttl': {
+                               'N': str(expiryTimestamp)
+                            }
+                        },
+                        ReturnConsumedCapacity='TOTAL'
+                    )
+                    print(responseContact)
+
+                # Update historical customer sentiments in the dynamodb table
+                def updateSentiments(ContactId,df,expiryTimestamp):
+                    print(f'negative value:{df["pastSenti_neg"]["ValueAsString"]}')
+                    print(f'neutral value:{df["pastSenti_nut"]["ValueAsString"]}')
+                    print(f'positive value:{df["pastSenti_pos"]["ValueAsString"]}')
+                    responseSentiment = ddbclient.put_item(
+                        TableName=SentimentsTable,
+                        Item={
+                            'ContactId':{
+                                'S': ContactId
+                            },
+                            'Neutrals':{
+                                'N': str(df["pastSenti_nut"]["ValueAsString"])
+                            },
+                            'Negatives':{
+                                'N': str(df["pastSenti_neg"]["ValueAsString"])
+                            },
+                            'Positives':{
+                                'N': str(df["pastSenti_pos"]["ValueAsString"])
+                            },
+                            'ttl': {
+                               'N': str(expiryTimestamp)
+                            }
+                        },
+                        ReturnConsumedCapacity='TOTAL'
+                    )
+                    print(responseSentiment)
+
+                # Main Function Starts
+                try:
+
+                    # Read the attributes provided by Amazon Connect
+                    ContactId = event['Details']['ContactData']['ContactId']
+                    customerid = event['Details']['ContactData']['Attributes']['customerid']
+                    InitialSentiment = event['Details']['ContactData']['Attributes']['customerSentiment']
+                    Sentiment = InitialSentiment [1:-1]
+                    print(Sentiment)
+
+                    # Calling API to get customer features from SageMaker Feature Store based on Customer ID for this Record
+                    featurestore_runtime = boto_session.client(service_name='sagemaker-featurestore-runtime', region_name=region)
+                    fsresponse = featurestore_runtime.get_record(FeatureGroupName=sagemakerFGname, RecordIdentifierValueAsString=customerid)
+                    Record = fsresponse ['Record']
+
+                    # Use pandas to read the Record
+                    df = pd.DataFrame(Record).set_index('FeatureName').transpose()
+                    print(df)
+
+                    # Call function to update sentiments table
+                    updateSentiments(ContactId, df,expiryTimestamp)
+
+                    if Sentiment == "POSITIVE":
+                        df['pastSenti_pos'] = df['pastSenti_pos'].astype(int) + 1
+                        df['sentiment'] = 1
+                    elif Sentiment == "NEUTRAL":
+                        df['pastSenti_nut'] = df['pastSenti_nut'].astype(int) + 1
+                        df['sentiment'] = 0
+                    elif Sentiment == "MIXED":
+                        df['pastSenti_nut'] = df['pastSenti_nut'].astype(int) + 1
+                        df['sentiment'] = 0
+                    elif Sentiment == "NEGATIVE":
+                        df['pastSenti_neg'] = df['pastSenti_neg'].astype(int) + 1
+                        df['sentiment'] = -1
+
+                    # Update Feature Store
+                    row = df.iloc[0]
+                    recordUpdate = [
+                        FeatureValue(
+                            FeatureName=df.columns[index],
+                            ValueAsString=str(row[index])
+                        )
+                        for index in range(0, len(row))
+                        if pd.notna(row[index])
+                    ]
+                    #print(record)
+
+                    # Update Feature Store
+                    featurestore_runtime.put_record(
+                        FeatureGroupName=sagemakerFGname,
+                        Record=recordUpdate
+                    )
+
+                    # Call API Endpoint with the new sentiment value
+                    df.drop(['event_time','customerID'], inplace=True, axis=1)
+                    csv_buffer = io.StringIO()
+                    csv_writer = csv.writer(csv_buffer, delimiter=",")
+                    csv_writer.writerow(df.values[0][1:])
+                    response = runtime_client.invoke_endpoint(
+                        EndpointName=endPointName, ContentType="text/csv", Body=csv_buffer.getvalue().rstrip("\r\n")
+                    )
+                    churn_pred = response["Body"].read().decode("ascii")
+                    updateTransaction(ContactId,str(churn_pred),expiryTimestamp)
+
+                    print(churn_pred)
+
+                    return {
+                        'message': 'Success',
+                        'ContactId': ContactId,
+                        'customerid': customerid,
+                        'Churn': churn_pred
+                    }
+
+                except Exception as a:
+                    print (a)
+
+      FunctionName: LexSentimentUpdate
+      Handler: index.lambda_handler
+      Role: !GetAtt LambdasIAMRole.Arn
+      Runtime: python3.9
+
+# Permission for Connect to access Lambda Function
+  ConnectFunctionPolicyLambdaLexSentiment:
+    Type: AWS::Lambda::Permission
+    DependsOn: LambdareInvent2022LexSentimentUpdate
+    Properties:
+      FunctionName: !Sub 'LexSentimentUpdate'
+      Action: "lambda:InvokeFunction"
+      Principal:  "connect.amazonaws.com"
+      SourceAccount: !Sub ${AWS::AccountId}
+      SourceArn: !Ref AmazonConnectInstanceARN
+
+# Kinesis Data Streams for Contact Lens Real time
+  KinesisContactLensRT:
+    Type: AWS::Kinesis::Stream
+    Properties:
+      RetentionPeriodHours: 24
+      StreamModeDetails:
+        StreamMode: ON_DEMAND
+
+# Lambda to Enable Kinesis for Real Time Contact Lens
+  LambdareInvent2022EnableKinesis:
+    Type: AWS::Lambda::Function
+    DependsOn:
+      - KinesisContactLensRT
+    Properties:
+      Description: Function to enable Kinesis for Real Time Contact Lens
+      Environment:
+        Variables:
+          InstanceARN: !Ref AmazonConnectInstanceARN
+          KinesisArn: !Sub arn:aws:kinesis:${AWS::Region}:${AWS::AccountId}:stream/${KinesisContactLensRT}
+      Code:
+        ZipFile: |
+            # MIT No Attribution
+
+            # Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
+
+            # Permission is hereby granted, free of charge, to any person obtaining a copy of this
+            # software and associated documentation files (the "Software"), to deal in the Software
+            # without restriction, including without limitation the rights to use, copy, modify,
+            # merge, publish, distribute, sublicense, and/or sell copies of the Software, and to
+            # permit persons to whom the Software is furnished to do so.
+
+            # THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED,
+            # INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A
+            # PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT
+            # HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION
+            # OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE
+            # SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+
+            import json
+            import boto3
+            import os
+            import cfnresponse
+
+            boto_session = boto3.Session()
+            connect = boto3.client('connect')
+            region = boto_session.region_name
+            InstanceArn = os.environ['InstanceARN']
+            KinesisArn = os.environ['KinesisArn']
+
+            def lambda_handler(event, context):
+
+              if event['RequestType'] == 'Create':
+
+                InstanceId = InstanceArn[-36:]
+                # Execute Request to associate Kinesis Streams with Contact Lens Real Time
+                try:
+                  response = connect.associate_instance_storage_config(
+                      InstanceId= InstanceId,
+                      ResourceType='REAL_TIME_CONTACT_ANALYSIS_SEGMENTS',
+                      StorageConfig={
+                          'StorageType': 'KINESIS_STREAM',
+                          'KinesisStreamConfig': {
+                              'StreamArn': KinesisArn
+                          }
+                      }
+                  )
+                  print(response)
+                  responseValue = 200
+                  responseData = {}
+                  responseData['Data'] = responseValue
+                  cfnresponse.send(event, context, cfnresponse.SUCCESS, responseData, "CustomResourcePhysicalID")
+
+                except Exception as e:
+                    print(e)
+
+              else:
+                  responseData = {}
+                  responseData['Data'] = "Delete"
+                  cfnresponse.send(event, context, cfnresponse.SUCCESS, responseData, "CustomResourcePhysicalID")
+
+      Handler: index.lambda_handler
+      Role: !GetAtt LambdasIAMRole.Arn
+      Runtime: python3.9
+
+# Invoke Lambda Function to associate Kinesis with Contact Lens Real Time
+  LambdainvokeKinesisCLRealTime:
+    Type: AWS::CloudFormation::CustomResource
+    DependsOn:
+      - LambdareInvent2022EnableKinesis
+    Version: "1.0"
+    Properties:
+      ServiceToken: !GetAtt LambdareInvent2022EnableKinesis.Arn
+
+# Lambda Function to capture contact lens realtime sentiments (it needs Pandas Layer)
+  LambdareInvent2022CLStreamRT:
+    Type: AWS::Lambda::Function
+    DependsOn:
+      - PandasLayer
+      - NumpyLayer
+    Properties:
+      Description: Function to capture contact lens realtime sentiments (it needs Pandas Layer)
+      Environment:
+        Variables:
+          ChurnPredictionTable: reInvent2022-ChurnPrediction
+          ContactIdTableName: reInvent2022-ContactIds
+          SentimentsTable: reInvent2022-Sentiments
+          SageMakerFGName: !Ref SageMakerFeatureGroupName
+          EndPointName: !Ref SageMakerEndPointName
+      Layers:
+        - !Ref PandasLayer
+        - !Ref NumpyLayer
+      Code:
+        ZipFile: |
+            # MIT No Attribution
+
+            # Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
+
+            # Permission is hereby granted, free of charge, to any person obtaining a copy of this
+            # software and associated documentation files (the "Software"), to deal in the Software
+            # without restriction, including without limitation the rights to use, copy, modify,
+            # merge, publish, distribute, sublicense, and/or sell copies of the Software, and to
+            # permit persons to whom the Software is furnished to do so.
+
+            # THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED,
+            # INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A
+            # PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT
+            # HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION
+            # OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE
+            # SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+
+            import json
+            import base64
+            import boto3
+            import os
+            # This funciton requires a pandas layer
+            import pandas as pd
+            import io
+            import csv
+            import datetime
+            import numpy
+            import time
+
+            # Environment Variables including DynamoDB Churn predictions and sentiment tables, SageMaker
+            # Feature Group and EndPoint
+
+            ContactIdTableName= os.environ['ContactIdTableName']
+            ChurnPredictionTable = os.environ['ChurnPredictionTable']
+            SentimentsTable = os.environ['SentimentsTable']
+            sagemakerFGname = os.environ['SageMakerFGName']
+            endPointName = os.environ['EndPointName']
+
+            boto_session = boto3.Session()
+            ddbclient = boto3.client('dynamodb')
+            dynamodb = boto3.resource('dynamodb')
+            region = boto_session.region_name
+            runtime_client = boto3.client("runtime.sagemaker")
+
+            # This lambda reads the Event details from Kinesis, get customer features from SageMaker Feature Store, inference to the SageMaker endpoint and update
+            # sentiments and churn prediction tables.
+            def lambda_handler(event, context):
+                print('Incoming event: ', event)
+
+                # expires after one day
+                expiryTimestamp = int(time.time() + 24*60*60)
+
+                # CALL UPDATE RECORD with the new Table
+                def FeatureValue (**kwargs):
+                    try:
+                        result = dict()
+                        for key, value in kwargs.items():
+                            if value is not None:
+                                result[key] = value
+                                #print(result)
+                        return result
+                    except Exception as e:
+                        print("error is: " + e)
+                        return {"Error"}
+
+
+                # This function returns the customerid for the specific ContactId
+                def getcustomerid (ContactId):
+                    try:
+                        table = dynamodb.Table(ContactIdTableName)
+                        response = table.get_item(Key={'ContactId' : ContactId})
+                        if 'Item' in response:
+                            customer = response['Item']['customerid']
+                            #print(customer)
+                            return customer
+                    except Exception as e:
+                        print(e)
+                        return {"Error"}
+
+                # Update the churn associated to the Contact ID in the churn prediction table
+                def updateTransaction(ContactId,churn_pred,expiryTimestamp):
+                    Time = str(datetime.datetime.utcnow())
+                    print(Time)
+                    responseContact = ddbclient.put_item(
+                        TableName=ChurnPredictionTable,
+                        Item={
+                            'ContactId':{
+                                'S': ContactId
+                            },
+                            'When':{
+                                'S': Time
+                            },
+                            'ChurnPrediction':{
+                                'N':churn_pred
+                            },
+                            'ttl': {
+                               'N': str(expiryTimestamp)
+                            }
+                        },
+                        ReturnConsumedCapacity='TOTAL'
+                    )
+                    print(responseContact)
+
+                # Update historical customer sentiments in the dynamodb table
+                def updateSentiments(ContactId,df,expiryTimestamp):
+                    print(f'negative value:{df["pastSenti_neg"]["ValueAsString"]}')
+                    print(f'neutral value:{df["pastSenti_nut"]["ValueAsString"]}')
+                    print(f'positive value:{df["pastSenti_pos"]["ValueAsString"]}')
+                    responseSentiment = ddbclient.put_item(
+                        TableName=SentimentsTable,
+                        Item={
+                            'ContactId':{
+                                'S': ContactId
+                            },
+                            'Neutrals':{
+                                'N': str(df["pastSenti_nut"]["ValueAsString"])
+                            },
+                            'Negatives':{
+                                'N': str(df["pastSenti_neg"]["ValueAsString"])
+                            },
+                            'Positives':{
+                                'N': str(df["pastSenti_pos"]["ValueAsString"])
+                            },
+                            'ttl': {
+                               'N': str(expiryTimestamp)
+                            }
+                        },
+                        ReturnConsumedCapacity='TOTAL'
+                    )
+                    print(responseSentiment)
+
+                # Main Function Starts
+                try:
+
+                    #Assign the data stream from Kinesis to 'records'
+                    records = event['Records']
+
+                    for record in records:
+                        # Read the 'data' section of the record
+                        data = record['kinesis']['data']
+
+                        # Decode the Kinesis stream based on base64
+                        payload = base64.b64decode(data)
+                        payload_str = json.loads(payload)
+
+                        eventType = payload_str['EventType']
+                        ContactId = payload_str['ContactId']
+                        customerid = getcustomerid(ContactId)
+
+                        print(payload_str)
+                        print(eventType)
+                        print(ContactId)
+                        print(customerid)
+
+                        # Calling API to get customer features from SageMaker Feature Store based on Customer ID for this Record
+                        featurestore_runtime = boto_session.client(service_name='sagemaker-featurestore-runtime', region_name=region)
+                        fsresponse = featurestore_runtime.get_record(FeatureGroupName=sagemakerFGname, RecordIdentifierValueAsString=customerid)
+                        Record = fsresponse ['Record']
+
+                        # Use pandas to read the Record
+                        df = pd.DataFrame(Record).set_index('FeatureName').transpose()
+                        print(df)
+
+                        # SEGMENTS eventType includes the Sentiment
+                        if eventType == "SEGMENTS":
+                            print("it is a Segment")
+
+                            Segments = []
+                            Segments = payload_str['Segments']
+
+                            for segment in Segments:
+                                if "Utterance" in segment:
+                                    print("This segment is an Utterance")
+
+                                # Transcript Segment includes the Sentiment
+                                elif "Transcript" in segment:
+                                    if segment ['Transcript'] ['ParticipantId'] == "CUSTOMER":
+                                        Sentiment = segment ['Transcript'] ['Sentiment']
+                                        print("it is a TRANSCRIPT and it is a CUSTOMER")
+                                        print("Sentiment is: " + Sentiment)
+                                        if Sentiment == "POSITIVE":
+                                            df['pastSenti_pos'] = df['pastSenti_pos'].astype(int) + 1
+                                            df['sentiment'] = 1
+                                        elif Sentiment == "NEUTRAL":
+                                            df['pastSenti_nut'] = df['pastSenti_nut'].astype(int) + 1
+                                            df['sentiment'] = 0
+                                        elif Sentiment == "MIXED":
+                                            df['pastSenti_nut'] = df['pastSenti_nut'].astype(int) + 1
+                                            df['sentiment'] = 0
+                                        elif Sentiment == "NEGATIVE":
+                                            df['pastSenti_neg'] = df['pastSenti_neg'].astype(int) + 1
+                                            df['sentiment'] = -1
+
+                                        # Update Feature Store
+                                        row = df.iloc[0]
+                                        recordUpdate = [
+                                            FeatureValue(
+                                                FeatureName=df.columns[index],
+                                                ValueAsString=str(row[index])
+                                            )
+                                            for index in range(0, len(row))
+                                            if pd.notna(row[index])
+                                        ]
+                                        #print(record)
+
+                                        # Update Feature Store
+                                        featurestore_runtime.put_record(
+                                            FeatureGroupName=sagemakerFGname,
+                                            Record=recordUpdate
+                                        )
+
+                                        # Call function to update sentiments table
+                                        updateSentiments(ContactId, df, expiryTimestamp)
+
+                                        # Call API Endpoint with the new sentiment value
+                                        df.drop(['event_time','customerID'], inplace=True, axis=1)
+                                        csv_buffer = io.StringIO()
+                                        csv_writer = csv.writer(csv_buffer, delimiter=",")
+                                        csv_writer.writerow(df.values[0][1:])
+                                        response = runtime_client.invoke_endpoint(
+                                            EndpointName=endPointName, ContentType="text/csv", Body=csv_buffer.getvalue().rstrip("\r\n")
+                                        )
+                                        churn_pred = response["Body"].read().decode("ascii")
+                                        updateTransaction(ContactId,str(churn_pred),expiryTimestamp)
+
+
+                                        print(churn_pred)
+                                    else:
+                                        print("Not a CUSTOMER")
+                                else:
+                                    print("Neither a TRANSCRIPT nor an UTTERANCE")
+                        else:
+                            print("Not a SEGMENT")
+
+                    return {
+                        'message': 'Success',
+                        'ContactId': ContactId,
+                        'customerid': customerid,
+                        'Churn': churn_pred
+                    }
+
+                except Exception as a:
+                    print (a)
+
+      Handler: index.lambda_handler
+      Role: !GetAtt LambdasIAMRole.Arn
+      Runtime: python3.9
+
+# Permission for SNS to call Lambda
+  KinesisTriggertoLambdaRTStream:
+    Type: AWS::Lambda::Permission
+    DependsOn:
+      - LambdareInvent2022CLStreamRT
+      - KinesisContactLensRT
+    Properties:
+      FunctionName: !Ref LambdareInvent2022CLStreamRT
+      Action: "lambda:InvokeFunction"
+      Principal:  "kinesis.amazonaws.com"
+      SourceAccount: !Sub ${AWS::AccountId}
+      SourceArn: !Sub arn:aws:kinesis:${AWS::Region}:${AWS::AccountId}:stream/${KinesisContactLensRT}
+
+# Event Source Mapping
+  LambdaKinesisEventSourceMapping:
+    Type: AWS::Lambda::EventSourceMapping
+    DependsOn:
+      - LambdareInvent2022CLStreamRT
+      - KinesisContactLensRT
+    Properties:
+        EventSourceArn: !Sub arn:aws:kinesis:${AWS::Region}:${AWS::AccountId}:stream/${KinesisContactLensRT}
+        FunctionName: !GetAtt LambdareInvent2022CLStreamRT.Arn
+        StartingPosition: "TRIM_HORIZON"
+
+# Lambda Function to Return churn values to API Gateway Tables with Time
+  LambdareInvent2022APIGatewayResponse:
+    Type: AWS::Lambda::Function
+    Properties:
+      Description: Function to Return churn values to API Gateway Tables with Time
+      Environment:
+        Variables:
+          ChurnTableName: reInvent2022-ChurnPrediction
+          SentimentsTableName: reInvent2022-Sentiments
+      Code:
+        ZipFile: |
+            # MIT No Attribution
+
+            # Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
+
+            # Permission is hereby granted, free of charge, to any person obtaining a copy of this
+            # software and associated documentation files (the "Software"), to deal in the Software
+            # without restriction, including without limitation the rights to use, copy, modify,
+            # merge, publish, distribute, sublicense, and/or sell copies of the Software, and to
+            # permit persons to whom the Software is furnished to do so.
+
+            # THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED,
+            # INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A
+            # PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT
+            # HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION
+            # OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE
+            # SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+
+            import json
+            import boto3
+            import os
+
+            ChurnTableName= os.environ['ChurnTableName']
+            SentimentsTableName= os.environ['SentimentsTableName']
+
+            dynamodb = boto3.resource('dynamodb')
+            dynamodbclient = boto3.client('dynamodb')
+
+            # This function reads the information in the contact ID and sentiments dynamodb tables based on Contact ID
+            # provided by the web interface via API Gateway and return an array with sentiments and churn predictions
+            def lambda_handler(event, context):
+
+              try:
+                print(event)
+                # ContactId passed from Agent CCP via API Gateway
+                ContactId = event ['ContactId']
+
+                print(ContactId)
+
+                myArray = []
+                mySentiment = []
+
+                # Churn prediction lookup on contact ID DynamoDB table using PartiQL
+                response = dynamodbclient.execute_statement(
+                  Statement='SELECT * FROM \"' + ChurnTableName + '\" WHERE \"ContactId\" = \'' + ContactId + '\''
+                  )
+
+                for x in response['Items']:
+                  myArray.append(float(x['ChurnPrediction']['N']))
+
+                # Sentiments lookup on sentiments DynamoDB table using PartiQL
+                response1 = dynamodbclient.execute_statement(
+                  Statement='SELECT * FROM \"' + SentimentsTableName + '\" WHERE \"ContactId\" = \'' + ContactId + '\''
+                  )
+                print(response1)
+                for x in response1['Items']:
+                  mySentiment.append(int(x['Negatives']['N']))
+                  mySentiment.append(int(x['Positives']['N']))
+                  mySentiment.append(int(x['Neutrals']['N']))
+
+                print(mySentiment)
+
+                # Return to the Agent CCP including Churn predictions and sentiments via API Gateway
+                return {
+                        "myArray" : myArray,
+                        "mySentiment" : mySentiment
+                        }
+                print(myArray)
+                print(mySentiment)
+
+              except Exception as e:
+                print (e)
+                return { 'message': 'Fail'}
+
+      Handler: index.lambda_handler
+      Role: !GetAtt LambdasIAMRole.Arn
+      Runtime: python3.9
+
+# Lambda Function to update customer Features from Agent Interface (it needs Pandas Layer)
+  LambdareInvent2022AgentUpdate:
+    Type: AWS::Lambda::Function
+    DependsOn:
+      - PandasLayer
+      - NumpyLayer
+    Properties:
+      Description: Function to update customer Features from Agent Interface (it needs Pandas Layer)
+      Environment:
+        Variables:
+          ContactTableName: reInvent2022-ContactIds
+          InstanceARN: !Ref AmazonConnectInstanceARN
+          ProfilesDomain: !Ref CustomerProfilesDomain
+          SageMakerFGName: !Ref SageMakerFeatureGroupName
+          StepFunctions: !GetAtt CreateTaskStateMachine.Arn
+          TaskContactFlowId: TaskContactFlowId
+      Layers:
+        - !Ref PandasLayer
+        - !Ref NumpyLayer
+      Code:
+        ZipFile: |
+            # MIT No Attribution
+
+            # Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
+
+            # Permission is hereby granted, free of charge, to any person obtaining a copy of this
+            # software and associated documentation files (the "Software"), to deal in the Software
+            # without restriction, including without limitation the rights to use, copy, modify,
+            # merge, publish, distribute, sublicense, and/or sell copies of the Software, and to
+            # permit persons to whom the Software is furnished to do so.
+
+            # THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED,
+            # INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A
+            # PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT
+            # HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION
+            # OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE
+            # SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+
+            import json
+            import boto3
+            import os
+            # This funciton requires a pandas layer
+            import pandas as pd
+            import numpy
+
+            ContactTableName= os.environ['ContactTableName']
+            sagemakerFGname = os.environ['SageMakerFGName']
+            InstanceArn = os.environ ['InstanceARN']
+            ProfilesDomain= os.environ['ProfilesDomain']
+            stepsFunctionARN = os.environ['StepFunctions']
+            TaskContactFlowId = os.environ['TaskContactFlowId']
+
+            boto_session = boto3.Session()
+            region = boto_session.region_name
+            connect = boto3.client('connect')
+            dynamodbclient = boto3.client('dynamodb')
+            profiles = boto3.client('customer-profiles')
+            sfn = boto3.client('stepfunctions')
+
+            # This lambda update the number of months contracted by the customer based on an update from
+            # the agent in the interface agent CCP via API Gateway
+            def lambda_handler(event, context):
+
+              try:
+                print(event)
+                InstanceId = InstanceArn[-36:]
+                # Values provided by API Gateway asigned to variables
+                ContactId = event ['ContactId']
+                phoneNumber = event ['phoneNumber']
+                email = event['email']
+                firstName = event['firstName']
+                Months = str(event['Months'])
+
+                # Update Amazon Connect Contact Attributes with new contracted months
+                responseConnect = connect.update_contact_attributes(
+                    InitialContactId=ContactId,
+                    InstanceId=InstanceId,
+                    Attributes={
+                        'contractedMonths': Months
+                    }
+                )
+
+                # Start StepFunctions when contract has been cancelled
+                if Months == "0" :
+                    response = sfn.start_execution(
+                        stateMachineArn=stepsFunctionARN,
+                        input=json.dumps({"InstanceId": InstanceId, "ContactFlowId": TaskContactFlowId, "phoneNumber": phoneNumber, "email": email, "firstName": firstName }
+                        ))
+                    print(response.get('executionArn'))
+
+                # Churn prediction lookup on contact ID DynamoDB table using PartiQL
+                response = dynamodbclient.execute_statement(
+                  Statement='SELECT * FROM \"' + ContactTableName + '\" WHERE \"ContactId\" = \'' + ContactId + '\''
+                  )
+                print(response)
+
+                # Retrieve customerProfile from Item returned from Profiles
+                if 'Items' in response:
+                  ProfileId= response['Items'][0]['customerProfile']['S']
+                  CustomerId= response['Items'][0]['customerid']['S']
+                  print(ProfileId)
+                  print(CustomerId)
+                else:
+                  print('No profile found for ContactId: ' + ContactId)
+
+                # Update Contracted months in the Customer Profiles
+                response = profiles.update_profile(
+                    DomainName=ProfilesDomain,
+                    ProfileId=ProfileId,
+                    AdditionalInformation=Months
+                    )
+
+                # Update SageMaker Feature Store with new contracted months using Customer ID
+                featurestore_runtime = boto_session.client(service_name='sagemaker-featurestore-runtime', region_name=region)
+                resp = featurestore_runtime.get_record(FeatureGroupName=sagemakerFGname, RecordIdentifierValueAsString=CustomerId)
+                Record = resp ['Record']
+
+                # use pandas to read Record
+                df = pd.DataFrame(Record).set_index('FeatureName').transpose()
+                df['mth_remain'] = Months
+
+                # Update record with the new Table
+                def FeatureValue(**kwargs):
+                    result = dict()
+                    for key, value in kwargs.items():
+                        if value is not None:
+                            result[key] = value
+                    return result
+
+                row = df.iloc[0]
+                record = [
+                    FeatureValue(
+                        FeatureName=df.columns[index],
+                        ValueAsString=str(row[index]),
+                    )
+                    for index in range(0, len(row))
+                    if pd.notna(row[index])
+                ]
+                print(record)
+                featurestore_runtime.put_record(
+                    FeatureGroupName=sagemakerFGname,
+                    Record=record,
+                )
+
+                # return consumed by API Gateway
+                return {
+                    'statusCode': 200,
+                    'body': json.dumps(event)
+                }
+
+              except Exception as e:
+                print (e)
+                return { 'message': 'Fail'}
+
+      Handler: index.lambda_handler
+      Role: !GetAtt LambdasIAMRole.Arn
+      Runtime: python3.9
+
+# API Gateway for Agent Interface
+  reInvent2022AgentInterfaceRestApi:
+    Type: AWS::ApiGateway::RestApi
+    DependsOn:
+      - LambdareInvent2022APIGatewayResponse
+      - LambdareInvent2022AgentUpdate
+    Properties:
+      Description: Return churn predictions for a contactID
+      Name: reInvent2022-AgentInterface
+      Parameters:
+        endpointConfigurationTypes: REGIONAL
+
+  reInvent2022ApiMethod:
+    Type: AWS::ApiGateway::Method
+    DependsOn:
+      - reInvent2022AgentInterfaceRestApi
+    Properties:
+      AuthorizationType: NONE
+      HttpMethod: POST
+      Integration:
+        IntegrationHttpMethod: POST
+        Type: AWS
+        Uri: !Sub arn:aws:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${LambdareInvent2022APIGatewayResponse.Arn}/invocations
+        IntegrationResponses:
+          - StatusCode: 200
+            ResponseParameters:
+              method.response.header.Access-Control-Allow-Headers: "'Content-Type,X-Amz-Date,Authorization,X-Api-Key,X-Amz-Security-Token'"
+              method.response.header.Access-Control-Allow-Methods: "'POST,OPTIONS'"
+              method.response.header.Access-Control-Allow-Origin: "'*'"
+            ResponseTemplates:
+              application/json: ''
+        PassthroughBehavior: WHEN_NO_MATCH
+      ResourceId: !GetAtt reInvent2022AgentInterfaceRestApi.RootResourceId
+      RestApiId: !Ref reInvent2022AgentInterfaceRestApi
+      MethodResponses:
+        - StatusCode: 200
+          ResponseModels:
+            application/json: 'Empty'
+          ResponseParameters:
+            method.response.header.Access-Control-Allow-Headers: false
+            method.response.header.Access-Control-Allow-Methods: false
+            method.response.header.Access-Control-Allow-Origin: false
+
+  reInvent2022ApiOptionsMethod:
+    Type: AWS::ApiGateway::Method
+    DependsOn:
+      - reInvent2022AgentInterfaceRestApi
+    Properties:
+      AuthorizationType: NONE
+      RestApiId: !Ref reInvent2022AgentInterfaceRestApi
+      ResourceId: !GetAtt reInvent2022AgentInterfaceRestApi.RootResourceId
+      HttpMethod: OPTIONS
+      Integration:
+        IntegrationResponses:
+        - StatusCode: 200
+          ResponseParameters:
+            method.response.header.Access-Control-Allow-Headers: "'Content-Type,X-Amz-Date,Authorization,X-Api-Key,X-Amz-Security-Token'"
+            method.response.header.Access-Control-Allow-Methods: "'POST,OPTIONS'"
+            method.response.header.Access-Control-Allow-Origin: "'*'"
+          ResponseTemplates:
+            application/json: ''
+        PassthroughBehavior: WHEN_NO_MATCH
+        Type: MOCK
+      MethodResponses:
+      - StatusCode: 200
+        ResponseModels:
+          application/json: 'Empty'
+        ResponseParameters:
+          method.response.header.Access-Control-Allow-Headers: false
+          method.response.header.Access-Control-Allow-Methods: false
+          method.response.header.Access-Control-Allow-Origin: false
+
+  APIupdatePath:
+    Type: 'AWS::ApiGateway::Resource'
+    Properties:
+      RestApiId: !Ref reInvent2022AgentInterfaceRestApi
+      ParentId: !GetAtt
+        - reInvent2022AgentInterfaceRestApi
+        - RootResourceId
+      PathPart: update
+
+  reInvent2022ApiUpdateMethod:
+    Type: AWS::ApiGateway::Method
+    DependsOn:
+      - reInvent2022AgentInterfaceRestApi
+      - APIupdatePath
+    Properties:
+      AuthorizationType: NONE
+      HttpMethod: POST
+      Integration:
+        IntegrationHttpMethod: POST
+        Type: AWS
+        Uri: !Sub arn:aws:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${LambdareInvent2022AgentUpdate.Arn}/invocations
+        IntegrationResponses:
+          - StatusCode: 200
+            ResponseParameters:
+              method.response.header.Access-Control-Allow-Headers: "'Content-Type,X-Amz-Date,Authorization,X-Api-Key,X-Amz-Security-Token'"
+              method.response.header.Access-Control-Allow-Methods: "'POST,OPTIONS'"
+              method.response.header.Access-Control-Allow-Origin: "'*'"
+            ResponseTemplates:
+              application/json: ''
+        PassthroughBehavior: WHEN_NO_MATCH
+      ResourceId: !Ref APIupdatePath
+      RestApiId: !Ref reInvent2022AgentInterfaceRestApi
+      MethodResponses:
+        - StatusCode: 200
+          ResponseModels:
+            application/json: 'Empty'
+          ResponseParameters:
+            method.response.header.Access-Control-Allow-Headers: false
+            method.response.header.Access-Control-Allow-Methods: false
+            method.response.header.Access-Control-Allow-Origin: false
+
+  reInvent2022ApiUpdateOptionsMethod:
+    Type: AWS::ApiGateway::Method
+    DependsOn:
+      - reInvent2022AgentInterfaceRestApi
+      - APIupdatePath
+    Properties:
+      AuthorizationType: NONE
+      RestApiId: !Ref reInvent2022AgentInterfaceRestApi
+      ResourceId: !Ref APIupdatePath
+      HttpMethod: OPTIONS
+      Integration:
+        IntegrationResponses:
+        - StatusCode: 200
+          ResponseParameters:
+            method.response.header.Access-Control-Allow-Headers: "'Content-Type,X-Amz-Date,Authorization,X-Api-Key,X-Amz-Security-Token'"
+            method.response.header.Access-Control-Allow-Methods: "'POST,OPTIONS'"
+            method.response.header.Access-Control-Allow-Origin: "'*'"
+          ResponseTemplates:
+            application/json: ''
+        PassthroughBehavior: WHEN_NO_MATCH
+        Type: MOCK
+      MethodResponses:
+      - StatusCode: 200
+        ResponseModels:
+          application/json: 'Empty'
+        ResponseParameters:
+          method.response.header.Access-Control-Allow-Headers: false
+          method.response.header.Access-Control-Allow-Methods: false
+          method.response.header.Access-Control-Allow-Origin: false
+
+  reInvent2022ApiDeployment:
+    Type: AWS::ApiGateway::Deployment
+    DependsOn:
+      - reInvent2022ApiMethod
+      - reInvent2022ApiOptionsMethod
+      - reInvent2022ApiUpdateMethod
+      - reInvent2022ApiUpdateOptionsMethod
+    Properties:
+      RestApiId: !Ref reInvent2022AgentInterfaceRestApi
+      StageName: prod
+
+  lambdaApiGatewayInvoke1:
+    Type: AWS::Lambda::Permission
+    Properties:
+      FunctionName: !GetAtt LambdareInvent2022APIGatewayResponse.Arn
+      Action: lambda:InvokeFunction
+      Principal: apigateway.amazonaws.com
+      SourceArn: !Sub arn:aws:execute-api:${AWS::Region}:${AWS::AccountId}:${reInvent2022AgentInterfaceRestApi}/*/POST/
+
+  lambdaApiGatewayInvoke2:
+   Type: AWS::Lambda::Permission
+   Properties:
+     FunctionName: !GetAtt LambdareInvent2022AgentUpdate.Arn
+     Action: lambda:InvokeFunction
+     Principal: apigateway.amazonaws.com
+     SourceArn: !Sub arn:aws:execute-api:${AWS::Region}:${AWS::AccountId}:${reInvent2022AgentInterfaceRestApi}/*/POST/update
+
+
+# Step Functions
+  CreateTaskStateMachine:
+    Type: AWS::StepFunctions::StateMachine
+    Properties:
+      StateMachineName: ContractCancelled
+      DefinitionString: !Sub |
+        {
+          "Comment": "Create a Task to Connect via API when Contract Cancelled",
+          "StartAt": "StartTaskContact",
+          "States": {
+            "StartTaskContact": {
+              "Type": "Task",
+              "End": true,
+              "Parameters": {
+                "InstanceId.$": "$.InstanceId",
+                "Name": "Contract Cancelled",
+                "ContactFlowId.$": "$.ContactFlowId",
+                "Attributes": {
+                  "Task": "Urgently Call Customer Back",
+                  "Name.$": "$.firstName",
+                  "Message": "Contract has been cancelled",
+                  "PhoneNumber.$": "$.phoneNumber"
+                  },
+                "References": {
+                  "Email": {
+                    "Value.$": "$.email",
+                    "Type": "EMAIL"
+                  }
+                }
+              },
+              "Resource": "arn:aws:states:::aws-sdk:connect:startTaskContact"
+            }
+          }
+        }
+      RoleArn: !GetAtt StepsIAMRole.Arn
+
+# LexV2 Bot
+  IVR:
+    Type: AWS::Lex::Bot
+    DependsOn:
+      - LexServiceLinkRole
+    Properties:
+      AutoBuildBotLocales: false
+      BotFileS3Location:
+        S3Bucket: nm-reinvent2022-files
+        S3ObjectKey: reInvent2022-LexBot-DRAFT-RATIIENAXZ-LexJson.zip
+      DataPrivacy:
+        ChildDirected: false
+      IdleSessionTTLInSeconds: 300
+      Description: "Lex for Initial Customer Sentiment - reInvent2022 - BIZ310"
+      Name: "reInvent2022-LexBot"
+      RoleArn: !Sub arn:aws:iam::${AWS::AccountId}:role/aws-service-role/lexv2.amazonaws.com/${LexServiceLinkRole}
+      TestBotAliasSettings:
+        BotAliasLocaleSettings:
+          - BotAliasLocaleSetting:
+              Enabled: true
+            LocaleId: en_US
+        SentimentAnalysisSettings:
+          DetectSentiment: true
+
+# S3 Bucket for Custom CCP Website
+  createCustomCCPS3Bucket:
+      Type: AWS::S3::Bucket
+      Properties:
+          BucketName: !Sub customccp-${AWS::AccountId}-${AWS::Region}
+          PublicAccessBlockConfiguration:
+              BlockPublicAcls: True
+              BlockPublicPolicy: True
+              IgnorePublicAcls: True
+              RestrictPublicBuckets: True
+          WebsiteConfiguration:
+              IndexDocument: CCPcustom.html
+              ErrorDocument: error.html
+
+# S3 Bucket Policy
+  CFS3BucketPolicy:
+      Type: AWS::S3::BucketPolicy
+      DependsOn:
+          - CFCloudFrontDistributionAccessIdentity
+      Properties:
+          Bucket: !Ref createCustomCCPS3Bucket
+          PolicyDocument:
+              Statement:
+                  -
+                      Action:
+                          - "s3:GetObject"
+                      Effect: "Allow"
+                      Principal:
+                          CanonicalUser:
+                              Fn::GetAtt: [ CFCloudFrontDistributionAccessIdentity , S3CanonicalUserId ]
+                      Resource:
+                            !Sub ${createCustomCCPS3Bucket.Arn}/*
+
+# CloudFront Distribution Access Identity
+  CFCloudFrontDistributionAccessIdentity:
+    Type: AWS::CloudFront::CloudFrontOriginAccessIdentity
+    Properties:
+      CloudFrontOriginAccessIdentityConfig:
+        Comment: 'reInvent BIZ310 Workshop - Custom CCP'
+
+# CloudFront Distribution
+  CFCloudFrontDistribution:
+      Type: AWS::CloudFront::Distribution
+      Properties:
+        DistributionConfig:
+          Origins:
+          - DomainName:
+              !Join
+                  - ''
+                  - - !Ref createCustomCCPS3Bucket
+                    - .s3.
+                    - !Sub ${AWS::Region}
+                    - .amazonaws.com
+            Id: !Ref createCustomCCPS3Bucket
+            S3OriginConfig:
+              OriginAccessIdentity:
+                  !Join
+                      - ''
+                      - - 'origin-access-identity/cloudfront/'
+                        - !Ref CFCloudFrontDistributionAccessIdentity
+          Enabled: 'true'
+          Comment: reInvent BIZ310 Workshop - Custom CCP
+          DefaultRootObject: CCPcustom.html
+          DefaultCacheBehavior:
+              AllowedMethods:
+                  - GET
+                  - HEAD
+                  - OPTIONS
+              TargetOriginId: !Ref createCustomCCPS3Bucket
+              ForwardedValues:
+                  QueryString: true
+                  Cookies:
+                      Forward: all
+              ViewerProtocolPolicy: redirect-to-https
