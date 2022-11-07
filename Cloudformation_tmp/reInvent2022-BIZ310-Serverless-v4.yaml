@@ -1021,6 +1021,7 @@ Resources:
       Handler: index.lambda_handler
       Role: !GetAtt LambdasIAMRole.Arn
       Runtime: python3.9
+      Timeout: 30
 
 # Permission for SNS to call Lambda
   KinesisTriggertoLambdaRTStream:

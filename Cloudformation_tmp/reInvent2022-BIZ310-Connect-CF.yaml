@@ -614,7 +614,7 @@ Resources:
             },
             {
               "Parameters": {
-                "Text": "In a few words tell us how you feel before we transfer you to an agent. ",
+                "Text": "In a few words please tell us how can we help you today before we transfer you to an agent.",
                 "LexV2Bot": {
                   "AliasArn": "arn:aws:lex:${AWS::Region}:${AWS::AccountId}:bot-alias/${LexV2BotID}/TSTALIASID"
                 }
