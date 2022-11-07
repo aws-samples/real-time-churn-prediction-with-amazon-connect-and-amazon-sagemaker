@@ -242,7 +242,7 @@ Resources:
                     "email": {
                       "useDynamic": true
                     },
-                    "hashValue": {
+                    "customerProfile": {
                       "useDynamic": true
                     }
                   }
@@ -254,7 +254,7 @@ Resources:
                   "contractedMonths",
                   "phoneNumber",
                   "email",
-                  "hashValue"
+                  "customerProfile"
                 ]
               },
               "7a63aba6-03c1-454f-afa6-4eef2dc8f42b": {
@@ -514,7 +514,7 @@ Resources:
                   "contractedMonths": "$.External.contractedMonths",
                   "phoneNumber": "$.CustomerEndpoint.Address",
                   "email": "$.External.email",
-                  "hashValue": "$.External.hashValue"
+                  "customerProfile": "$.External.customerProfile"
                 }
               },
               "Identifier": "5bffcccf-5352-47d4-8953-2c6440a3e86f",
