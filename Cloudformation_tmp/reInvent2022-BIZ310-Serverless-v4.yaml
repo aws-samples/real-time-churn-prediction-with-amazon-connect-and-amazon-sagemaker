@@ -575,8 +575,7 @@ Resources:
                     # Read the attributes provided by Amazon Connect
                     ContactId = event['Details']['ContactData']['ContactId']
                     customerid = event['Details']['ContactData']['Attributes']['customerid']
-                    InitialSentiment = event['Details']['ContactData']['Attributes']['customerSentiment']
-                    Sentiment = InitialSentiment [1:-1]
+                    Sentiment = event['Details']['ContactData']['Attributes']['customerSentiment']
                     print(Sentiment)
 
                     # Calling API to get customer features from SageMaker Feature Store based on Customer ID for this Record
