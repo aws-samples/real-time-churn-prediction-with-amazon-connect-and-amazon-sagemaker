@@ -225,6 +225,24 @@ Resources:
     Properties:
       TopicName: NegativeSentiment
 
+# SNS Policy for Event Bridge
+  SNSpolicyforEventBridge:
+    Type: AWS::SNS::TopicPolicy
+    Properties:
+      PolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service:
+                - events.amazonaws.com
+            Action:
+              - sns:Publish
+            Resource:
+              - !Ref 'SNSforNegativeSentiment'
+      Topics:
+        - !Ref 'SNSforNegativeSentiment'
+
 # Subscription to send email with negative sentiment
   EmailSubscription:
     Type: AWS::SNS::Subscription
