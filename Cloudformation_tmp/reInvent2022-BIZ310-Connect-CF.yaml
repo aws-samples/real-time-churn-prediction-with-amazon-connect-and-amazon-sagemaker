@@ -308,12 +308,12 @@ Resources:
                     "AliasArn": {
                       "useDynamic": false,
                       "useLexBotDropdown": true,
-                      "lexV2BotName": "reInvent2002-LexBot"
+                      "lexV2BotName": "reInvent2022-LexBot"
                     }
                   }
                 },
                 "useLexBotDropdown": true,
-                "lexV2BotName": "reInvent2002-LexBot",
+                "lexV2BotName": "reInvent2022-LexBot",
                 "conditionMetadata": [
                   {
                     "id": "a3119770-88e0-456e-85b8-b9b5a1a348a0",
@@ -548,7 +548,7 @@ Resources:
             {
               "Parameters": {
                 "LambdaFunctionARN": "arn:aws:lambda:${AWS::Region}:${AWS::AccountId}:function:LexSentimentUpdate",
-                "InvocationTimeLimitSeconds": "3"
+                "InvocationTimeLimitSeconds": "8"
               },
               "Identifier": "6fcad9a5-6a5b-4cb0-a0e6-046876bb8526",
               "Type": "InvokeLambdaFunction",
