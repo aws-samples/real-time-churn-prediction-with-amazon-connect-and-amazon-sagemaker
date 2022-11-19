@@ -24,6 +24,10 @@ Parameters:
     Default: "**** Enter the Full Amazon Connect Instance ARN ****"
     Description: The Amazon Connect Instance ARN
     Type: String
+  NewEmailForNotifications:
+    Default: "**** Enter an email address for Retention Specialist ****"
+    Description: Email for New Contact Lens Notification
+    Type: String
 
 # Basic and Retention queue ARNs
 Outputs:
@@ -480,7 +484,7 @@ Resources:
       IdentityInfo:
         FirstName: 'Retention1'
         LastName: 'Specialist'
-        Email: 'retention1.specialist@email.com'
+        Email: !Ref NewEmailForNotifications
       PhoneConfig:
         PhoneType: 'SOFT_PHONE'
       Username: 'retention1'
